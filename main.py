@@ -282,12 +282,32 @@ async def memory_middleware(request: Request, call_next):
     process = psutil.Process()
     system_mem = psutil.virtual_memory()
     
+    # --- Memory Protection Check (NEW) ---
+    if system_mem.percent > 90 or system_mem.available < 100 * 1024 * 1024:  # 100MB threshold
+        error_msg = {
+            "error": "Server memory constrained",
+            "detail": {
+                "system_memory_percent": system_mem.percent,
+                "available_mb": round(system_mem.available/1024/1024, 1),
+                "suggestion": "Try again later or use smaller files"
+            }
+        }
+        print(f"🚨 MEMORY PROTECTION TRIGGERED: {error_msg}")
+        return JSONResponse(error_msg, status_code=503)
+    
     # --- Before request ---
     mem_before = process.memory_info().rss / 1024 / 1024  # MB
     start_time = time.time()
     
-    # --- Process request ---
-    response = await call_next(request)
+    try:
+        # --- Process request ---
+        response = await call_next(request)
+        
+    except Exception as e:
+        # --- Error Handling ---
+        elapsed = time.time() - start_time
+        print(f"❌ Error in {request.url.path}: {str(e)} [{elapsed:.2f}s]")
+        raise
     
     # --- After request ---
     mem_after = process.memory_info().rss / 1024 / 1024
@@ -295,24 +315,25 @@ async def memory_middleware(request: Request, call_next):
     memory_used = mem_after - mem_before
     
     # --- System Memory Check ---
-    system_mem = psutil.virtual_memory()
     if system_mem.percent > 80:
-        print(f"🚨 CRITICAL: System memory at {system_mem.percent}%!")
+        print(f"🚨 WARNING: System memory at {system_mem.percent}%")
         print(f"    Available: {system_mem.available/1024/1024:.1f}MB")
         print(f"    Used by Python: {mem_after:.1f}MB")
+        print(f"    Request consumed: {memory_used:.1f}MB")
     
     # --- Per-Request Metrics ---
     endpoint_metrics[request.url.path] = {
         "memory_used_mb": round(memory_used, 2),
         "system_memory_percent": system_mem.percent,
-        "time_sec": round(elapsed, 2)
+        "time_sec": round(elapsed, 2),
+        "timestamp": datetime.now().isoformat()  # NEW: Added timestamp
     }
     
-    # --- NEW: Request Timing Log ---
-    print(f"{request.method} {request.url.path} completed in {elapsed:.2f}s")  # 🎯 Added logging
+    # --- Request Timing Log ---
+    status_code = getattr(response, "status_code", 500)
+    print(f"{request.method} {request.url.path} ({status_code}) {elapsed:.2f}s | +{memory_used:.1f}MB")  # Enhanced logging
     
     return response
-    
 # Your regular endpoints (no decorators needed)
 @app.get("/light")
 async def light_endpoint():
@@ -677,19 +698,17 @@ def process_line(line_number: int, current: str, previous: str):
     }
 
 async def parse_log_file(log: str):
-    """Main log parsing function with memory-efficient processing"""
-    # Check cache first (this must come BEFORE the if statement)
+    """Optimized main log parsing function with enhanced progress tracking"""
+    # Cache check remains first (unchanged)
     cached_result = await LOG_CACHE.get(log)
-    
     if cached_result is not None:
         logger.info(f"[♻️] Cache HIT for {log}")
         return cached_result
-    else:
-        logger.info(f"[🔄] Cache MISS for {log}, processing...")
-
-    # Rest of your function remains the same...
+    
+    logger.info(f"[🔄] Cache MISS for {log}, processing...")
     start_time = time.time()
-    logger.info(f"[⏱️] XML RQ/RS Extraction Started for {log}")
+    last_progress_log = start_time
+    last_match_time = start_time
     
     if not memory_safe():
         raise HTTPException(503, detail="Server memory constrained")
@@ -698,74 +717,94 @@ async def parse_log_file(log: str):
     entries = []
     previous_line = ""
     line_count = 0
-    
+    total_lines = 0  # We'll count this first for accurate progress
+
+    # First pass: count total lines (for accurate progress %)
     try:
         async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                tasks = []
-                
-                async for line in f:
-                    line_count += 1
-                    if line_count == 1:  # Skip header
-                        continue
-                        
-                    stripped = line.strip()
-                    
-                    # Submit task if line might contain RQ/RS
-                    if "<" in stripped:  # Quick pre-check before regex
-                        tasks.append(
-                            asyncio.get_event_loop().run_in_executor(
-                                executor,
-                                process_line,
-                                line_count,
-                                stripped,
-                                previous_line
-                            )
-                        )
-                    
-                    previous_line = stripped
-                    
-                    # Process batches more frequently with smaller size
-                    if len(tasks) >= BATCH_SIZE:
-                        batch_results = await asyncio.gather(*tasks)
-                        entries.extend(r for r in batch_results if r)
-                        tasks = []
-                        await asyncio.sleep(0.1)
-                    
-                    # Less frequent progress updates
-                    if line_count % PROGRESS_INTERVAL == 0:
-                        logger.info(f"Processed {line_count:,} lines...")
-                
-                # Process any remaining tasks
-                if tasks:
-                    batch_results = await asyncio.gather(*tasks)
-                    entries.extend(r for r in batch_results if r)
-    
+            async for _ in f:
+                total_lines += 1
     except FileNotFoundError:
         raise HTTPException(404, detail=f"Log file not found: {log}")
+
+    # Second pass: actual processing
+    try:
+        async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
+            async for line in f:
+                line_count += 1
+                if line_count == 1:  # Skip header
+                    continue
+                    
+                stripped = line.strip()
+                
+                # Process line
+                if "<" in stripped:  # Quick pre-check
+                    line_start_time = time.time()
+                    result = process_line(line_count, stripped, previous_line)
+                    
+                    if result:
+                        match_time = time.time() - line_start_time
+                        entries.append(result)
+                        
+                        # Enhanced match logging
+                        logger.info(
+                            f"[⚡] Found {result['tag']} at line {line_count} "
+                            f"(Thread: {result['thread']}) "
+                            f"in {match_time*1000:.1f}ms"
+                        )
+                        last_match_time = time.time()
+                
+                previous_line = stripped
+                
+                # Progress tracking (every 1% or 1 second, whichever comes first)
+                progress_percent = (line_count / total_lines) * 100
+                if (time.time() - last_progress_log > 1.0) or (line_count % max(1, total_lines//100) == 0):
+                    elapsed = time.time() - start_time
+                    remaining_estimate = (elapsed / line_count) * (total_lines - line_count)
+                    
+                    logger.info(
+                        f"[📈] Progress: {progress_percent:.1f}% | "
+                        f"Lines: {line_count:,}/{total_lines:,} | "
+                        f"Matches: {len(entries):,} | "
+                        f"Elapsed: {format_time(elapsed)} | "
+                        f"ETA: {format_time(remaining_estimate)}"
+                    )
+                    last_progress_log = time.time()
+                
+                # Cooperative multitasking point
+                if line_count % 100 == 0:
+                    await asyncio.sleep(0)
+
     except Exception as e:
         logger.error(f"Error processing {log}: {str(e)}", exc_info=True)
         raise HTTPException(500, detail="Internal server error")
 
+    # Final statistics
     elapsed_time = time.time() - start_time
+    lines_per_sec = line_count / elapsed_time if elapsed_time > 0 else 0
+    
     logger.info(f"[✅] Completed Parsing RQ/RS from {log}")
-    logger.info(f"[✅] Total Lines Scanned: {line_count:,} | Found RQ/RS Entries: {len(entries):,}")
-    logger.info(f"[✅] Total Time Elapsed: {format_time(elapsed_time)}")
+    logger.info(f"[📊] Final Stats:")
+    logger.info(f"  Lines Processed: {line_count:,} ({lines_per_sec:,.1f} lines/sec)")
+    logger.info(f"  RQ/RS Entries Found: {len(entries):,}")
+    logger.info(f"  Time Elapsed: {format_time(elapsed_time)}")
+    logger.info(f"  Last Match Found at: {format_time(last_match_time - start_time)} into processing")
     
     result = {
         "metadata": {
             "lines_processed": line_count,
+            "total_lines": total_lines,
             "entries_found": len(entries),
-            "elapsed_seconds": round(elapsed_time, 2)
+            "elapsed_seconds": round(elapsed_time, 2),
+            "processing_rate": round(lines_per_sec, 1),
+            "last_match_at": round(last_match_time - start_time, 2)
         },
         "rqrs": entries
     }
     
-    # Store result in cache
     await LOG_CACHE.set(log, result)
-    
     return result
-
+    
 @app.get("/get_rqrs")
 async def get_rqrs(log: str):
     """Endpoint that uses the optimized parser"""
