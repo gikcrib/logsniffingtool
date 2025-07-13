@@ -1,0 +1,1508 @@
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: "";
+  display: block;
+  height: 40px;
+}
+
+.container {
+  padding: 40px 60px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+h1, h2, h3 {
+  color: var(--highlight);
+  position: relative;
+  padding-bottom: 5px;
+  margin-bottom: 1rem; /* adds spacing after the title */
+}
+
+h1::after, h2::after, h3::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background-color: var(--border-color);
+}
+
+.filter-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+input[type="text"] {
+  padding: 5px;
+  width: 200px;
+}
+
+input:disabled {
+  background-color: #eee;
+  color: #999;
+  cursor: not-allowed;
+}
+
+table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-bottom: 1em;
+  word-wrap: break-word;
+}
+
+thead {
+  background-color: var(--table-header);
+}
+
+tbody tr:nth-child(even) {
+  background-color: var(--table-alt-row);
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--border-color);
+}
+
+th {
+  text-align: center;
+  vertical-align: middle;
+  font-size: 16px;
+  font-weight: bold;
+  position: relative;
+  cursor: pointer;
+}
+
+th:nth-child(1) { width: 200px; }
+th:nth-child(2) { width: 120px; }
+th:nth-child(3) { width: 200px; }
+th:nth-child(4) { width: 200px; }
+
+td:nth-child(3) {
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+td {
+  overflow-wrap: break-word;
+  vertical-align: top;
+  padding: 6px 8px;
+}
+
+.section-header {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5em;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+.toast {
+  position: fixed;
+  top: 15px;
+  right: 20px;
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 5px;
+  display: none;
+  z-index: 1000;
+  font-size: 14px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.2);
+}
+
+/* Sorting arrows for sortable columns */
+th.sortable::after {
+  content: '↕️';
+  font-size: 12px;
+  margin-left: 6px;
+  color: var(--highlight);
+  opacity: 0.5;
+}
+
+.log-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.log-controls label,
+.log-controls select,
+.log-controls button {
+  font-size: 14px;
+  padding: 5px;
+}
+
+.error-summary {
+  background: var(--table-alt-row);
+  border: 1px solid var(--border-color);
+  padding: 10px;
+  margin-bottom: 1em;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.error-summary h3 {
+  margin-top: 0;
+  color: var(--highlight);
+   font-size: 16px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+.error-summary {
+  background: var(--table-alt-row);
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  margin-bottom: 1em;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ✅ Horizontally layout the FATAL / ERROR / WARN blocks */
+.error-bar-group {
+  display: flex;                  /* 🔄 Make children sit in a row */
+  justify-content: space-between;/* 📏 Spread them out evenly */
+  gap: 20px;                      /* 🧱 Space between each block */
+  margin-top: 10px;              /* 📏 Space above the group */
+  flex-wrap: wrap;               /* 📱 Allows wrapping on small screens */
+}
+
+/* ✅ Each FATAL / ERROR / WARN box shares this */
+.error-bar {
+  flex: 1;                        /* ⚖️ Equal width per block */
+  max-width: 250px;              /* 🚫 Don’t let them grow too wide */
+  min-width: 150px;              /* 🧱 Optional: Prevent them getting too narrow */
+}
+
+/* ✅ You likely already have these styles below — listed here for reference only */
+.bar {
+  height: 10px;
+  background-color: #ddd;
+  border-radius: 5px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 5px;
+}
+
+/* 🔴 Red fill for FATAL */
+.fatal .fill {
+  background-color: #d9534f;
+}
+
+/* 🟠 Orange fill for ERROR */
+.error .fill {
+  background-color: #f0ad4e;
+}
+
+/* 🟡 Yellow fill for WARN */
+.warn .fill {
+  background-color: #f9c74f;
+}
+
+
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: linear-gradient(to right, var(--highlight), #005fa3);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 32px; /* wider horizontal padding */
+  z-index: 999;
+  height: 60px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+  font-family: "Segoe UI", sans-serif;
+  box-sizing: border-box; /* ensure padding is respected */
+  overflow: visible; /* ← key if something is clipping */
+}
+
+.app-header .branding {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-header .logo {
+  font-size: 24px;
+}
+
+.app-header .title {
+  font-size: 22px;
+  font-weight: 600;
+  padding: 12px 28px;
+  letter-spacing: 0.5px;
+}
+
+
+/* Push content below fixed header */
+body::before {
+  content: "";
+  display: block;
+  height: 60px;
+}
+
+.branding {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  font-size: 24px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+#themeToggleBtn {
+  background: none;
+  border: none;
+  font-size: 26px;
+  color: white;
+  cursor: pointer;
+  padding: 6px 6px;
+  margin: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#themeToggleBtn:hover {
+  transform: scale(1.15);
+}
+
+html, body {
+  overflow-x: hidden;
+}
+
+select:disabled option {
+  font-style: italic;
+  color: gray;
+}
+
+.modal {
+  background: var(--bg-color);
+  color: var(--text-color);
+  padding: 24px;
+  border-radius: 10px;
+  width: 400px;
+  box-shadow: 0 0 12px rgba(0,0,0,0.4);
+  font-size: 14px;
+}
+
+.modal-box {
+  background: var(--bg-color);
+  color: var(--text-color);
+  padding: 1rem;
+  border-radius: 12px;
+  max-width: 90%;
+  max-height: 80%;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.modal-box h2 {
+  margin: 0 0 0.5rem;
+}
+
+.modal-box p {
+  margin: 0;
+}
+
+.modal h2 {
+  margin-top: 0;
+  font-size: 18px;
+  color: var(--highlight);
+}
+
+.modal-field {
+  margin: 12px 0;
+}
+
+.modal-field input {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.modal-actions button {
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.modal-content {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 360px;
+  max-width: 90%;
+  text-align: center;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+#logContextText {
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: hidden;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 1em;
+  background-color: #f9f9f9;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+#logContextModal button {
+  padding: 6px 12px;
+  background-color: var(--highlight);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#logContextModal button:hover {
+  background-color: #005fa3;
+}
+
+.loading-spinner {
+  padding: 1em;
+  font-weight: bold;
+  color: #444;
+  font-size: 1rem;
+  text-align: center;
+}
+[data-theme="dark"] .loading-spinner {
+  color: #eee;
+}
+
+.spinner {
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #555;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 14px;
+  background-color: #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #4caf50;
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  text-align: center;
+  font-size: 0.85em;
+  margin-top: 4px;
+  color: #444;
+}
+[data-theme="dark"] .progress-text {
+  color: #ccc;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 1em;
+}
+
+/* Only affects analysisErrorModal */
+#analysisOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: none; /* will be set to flex via JS */
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+#analysisOverlay .modal-box {
+  background-color: var(--bg-color, white);
+  color: var(--text-color, black);
+  padding: 20px 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  max-width: 600px;
+  font-size: 1.2rem;
+}
+
+#analysisOverlay h2,
+#analysisOverlay p {
+  margin: 10px 0;
+}
+
+/* Log Context Modal Overlay */
+#logContextModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+#logContextModal .modal-box {
+  background-color: var(--bg-color, white);
+  color: var(--text-color, black);
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  text-align: left;
+  max-width: 700px;
+  font-size: 0.9rem;
+  width: 90%;
+}
+
+/* Highlight RQ/RS tag if it has an issue */
+.rqrs-warning {
+  font-weight: bold;
+  color: #c0392b; /* red tone */
+}
+
+#rqrsTable a {
+  text-decoration: none;
+  color: var(--highlight);
+  font-weight: bold;
+}
+
+#rqrsTable a:hover {
+  text-decoration: underline;
+}
+
+pre, .xml-viewer {
+  white-space: pre-wrap;
+  background-color: #f9f9f9;
+  padding: 1em;
+  border-radius: 4px;
+  font-family: Consolas, monospace;
+  font-size: 0.95em;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+
+
+
+/* ✅ Fully Custom Styling for XML Modal - No overlap with baseline modal styles */
+
+/* Fullscreen overlay */
+.custom-xml-modal {
+  position: fixed;
+  z-index: 10000;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 15, 15, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Inner modal box */
+.custom-xml-container {
+  background-color: #ffffff;
+  color: #333333;
+  padding: 24px;
+  width: 80%;
+  max-height: 85%;
+  overflow: auto;
+  border-radius: 12px;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+}
+
+/* Close button */
+.custom-xml-close-btn {
+  background-color: #ff5c5c;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  float: right;
+}
+
+.custom-xml-close-btn:hover {
+  background-color: #ff1c1c;
+}
+
+/* Modal title */
+.custom-xml-title {
+  margin-top: 0;
+  color: #007bff;
+  font-size: 18px;
+  text-align: left;
+}
+
+/* XML viewer area */
+.custom-xml-viewer {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background-color: #f0f0f0;
+  padding: 18px;
+  border-radius: 6px;
+  border: 1px solid #cccccc;
+  margin-top: 20px;
+  overflow-x: auto;
+}
+
+/* 🔔 Modal: No Logs Found */
+#noLogsModal {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(15, 15, 15, 0.85);
+  justify-content: center;
+  align-items: center;
+}
+
+#noLogsModal .modal-content {
+  background-color: #fff;
+  padding: 24px;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+#noLogsModal .close {
+  float: right;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+  color: #999;
+}
+
+#noLogsModal .close:hover {
+  color: #000;
+}
+
+/* 🕐 Modal overlay for loading SOAP XML */
+.loading-xml-modal {
+  display: none; /* hidden by default */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(25, 25, 25, 0.75);
+  z-index: 1100;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-xml-container {
+  background-color: #ffffff;
+  padding: 2rem;
+  border-radius: 14px;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  text-align: center;
+  font-family: Arial, sans-serif;
+}
+
+.loading-xml-title {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  color: #0066cc;
+}
+
+.loading-xml-message {
+  color: #444;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+/* 🔄 Refresh Confirmation Modal Styling */
+#refreshConfirmModal.modal-overlay {
+  display: none;
+  position: fixed;
+  z-index: 10000;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  justify-content: center;
+  align-items: center;
+}
+
+#refreshConfirmModal .modal-box {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 1rem;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.modal-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  margin: 0 0.5rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.modal-btn.confirm {
+  background-color: #28a745;
+  color: white;
+}
+
+.modal-btn.cancel {
+  background-color: #dc3545;
+  color: white;
+}
+
+/* 🔧 Flex container for top-right controls */
+.top-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px; /* 🔁 Reduced from 10px to 2px */
+  padding: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  /* background-color: var(--background-color); */ /* match your theme */
+}
+
+
+
+
+
+
+
+
+
+/* =========================== UPDATED CSS For FINALIZATION =========================== */
+
+
+/* =========================== GLOBAL Styling - START =========================== */ 
+/* =========================== GLOBAL Styling - START =========================== */ 
+/* 🌗 Theme Toggle Button */
+#themeToggleWrapper {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+:root {
+  --bg-color: #ffffff;
+  --text-color: #111;
+  --highlight: #007acc;
+  --border-color: #ccc;
+  --table-header: #E6E6FA;
+  --table-alt-row: #e9f0f5;
+}
+
+[data-theme="dark"] {
+  --bg-color: #1e1e1e;
+  --text-color: #e0e0e0;
+  --highlight: #ffa500;
+  --border-color: #555;
+  --table-header: #2a2a2a;
+  --table-alt-row: #2c2c2c;
+}
+
+/* 🔄 Refresh Button — match styling with theme button */
+#refreshPageBtn {
+  background: none;
+  border: none;
+  font-size: 26px;
+  color: white;
+  cursor: pointer;
+  padding: 8px 12px;
+  margin: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#refreshPageBtn:hover {
+  transform: scale(1.15);
+}
+
+/* =========================== GLOBAL Styling - END =========================== */
+
+/* =========================== Summary of Errors Found Section - START =========================== */ 
+/* =========================== Summary of Errors Found Section - END =========================== */
+ 
+/* =========================== Services SOAP XML RQ/RS Section - START =========================== */ 
+
+/* RQ/RS Table Container */
+.rqrs-table-container {
+  background: var(--table-alt-row);
+  border: 1px solid var(--border-color);
+  border-radius: 12px; /* This creates the oval/rounded edges */
+  padding: 10px;
+  margin-bottom: 1em;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: hidden; /* Ensures child elements respect the rounded corners */
+}
+
+/* Table styling inside the container */
+.rqrs-table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 8px; /* Slightly less than container for visual harmony */
+  overflow: hidden; /* Important for table rounding to show */
+}
+
+.rqrs-table-container th,
+.rqrs-table-container td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rqrs-table-container th {
+  background-color: var(--table-header-bg);
+  font-weight: bold;
+}
+
+.rqrs-table-container tr:nth-child(even) {
+  background-color: var(--table-alt-row);
+}
+
+.rqrs-table-container tr:hover {
+  background-color: var(--table-hover-bg);
+}
+
+/* =========================== Services SOAP XML RQ/RS Section - END =========================== */ 
+
+/* =========================== Search Tools Section - START =========================== */ 
+/* Seacrh Table MAIN Container */
+.search-filter-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+/* ===== SEARCH TOOL FILTERS ===== */
+.searchtoolfilters-input {
+  padding: 10px 15px;
+  border: 2px solid #4a6fa5;
+  border-radius: 25px;
+  font-size: 14px;
+  width: 300px;
+  background-color: #f8faff;
+  box-shadow: 0 2px 5px rgba(74, 111, 165, 0.1);
+  transition: all 0.3s ease;
+}
+
+.searchtoolfilters-input:focus {
+  outline: none;
+  border-color: #3a56a0;
+  box-shadow: 0 2px 8px rgba(74, 111, 165, 0.2);
+  background-color: #fff;
+}
+
+.searchtoolfilters-label {
+  margin: 0 10px;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: #4a4a4a;
+  font-weight: 500;
+}
+
+.searchtoolfilters-radio {
+  margin: 0 5px 0 15px;
+  accent-color: #4a6fa5;
+  transform: scale(1.1);
+}
+
+.searchtoolfilters-select {
+  padding: 8px 15px;
+  border: 2px solid #4a6fa5;
+  border-radius: 20px;
+  font-size: 14px;
+  background-color: #f8faff;
+  color: #333;
+  margin: 0 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.searchtoolfilters-select:focus {
+  outline: none;
+  border-color: #3a56a0;
+  box-shadow: 0 2px 8px rgba(74, 111, 165, 0.2);
+}
+
+.searchtoolfilters-button {
+  padding: 10px 25px;
+  background-color: #4a6fa5;
+  color: white;
+  border: none;
+  border-radius: 25px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 5px rgba(74, 111, 165, 0.3);
+}
+
+.searchtoolfilters-button:hover {
+  background-color: #3a56a0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(74, 111, 165, 0.4);
+}
+
+.searchtoolfilters-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 5px rgba(74, 111, 165, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .searchtoolfilters-input {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  .searchtoolfilters-label,
+  .searchtoolfilters-select {
+    margin: 5px 0;
+    display: block;
+  }
+}
+
+/* ===== SEARCH TOOL TABLE ===== */
+/* Search summary styling */
+.search-summary {
+    margin-top: 15px;
+    padding: 8px 12px;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+	border-left: 4px solid #3498db;
+    border-radius: 4px;
+    font-family: monospace;
+    text-align: left;
+    font-size: 0.9em;
+    color: #2c3e50;
+}
+
+/* Search results table styling */
+.searchtool-table-container {
+  background: var(--table-alt-row);
+  border: 1px solid var(--border-color);
+  border-radius: 12px; /* This creates the oval/rounded edges */
+  padding: 10px;
+  margin-bottom: 1em;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: hidden; /* Ensures child elements respect the rounded corners */
+}
+
+.searchtool-table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 8px; /* Slightly less than container for visual harmony */
+  overflow: hidden; /* Important for table rounding to show */
+}
+
+.searchtool-table-container th,
+.searchtool-table-container td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.searchtool-table-container th {
+  background-color: var(--table-header-bg);
+  font-weight: bold;
+}
+
+.searchtool-table-container tr:nth-child(even) {
+  background-color: var(--table-alt-row);
+}
+
+.searchtool-table-container tr:hover {
+  background-color: var(--table-hover-bg);
+}
+
+.searchtooltable {
+  width: 100%;
+  table-layout: fixed; /* Makes columns equal width */
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 20px;
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(74, 111, 165, 0.1);
+  font-family: 'Segoe UI', sans-serif;
+}
+
+/* Equal width for all columns */
+.searchtooltable th,
+.searchtooltable td {
+  width: 20%; /* 100% divided by 5 columns */
+}
+
+.searchtooltable thead {
+  background-color: #4a6fa5;
+  color: white;
+}
+
+.searchtooltable th {
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.searchtooltable tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.searchtooltable tbody tr:nth-child(even) {
+  background-color: #f8faff;
+}
+
+.searchtooltable tbody tr:hover {
+  background-color: #e6efff;
+}
+
+.searchtooltable td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #e0e7ff;
+  font-size: 13px;
+  vertical-align: top;
+  word-wrap: break-word; /* Handle long content */
+}
+
+.searchtooltable td:first-child {
+  font-weight: 500;
+  color: #3a56a0;
+}
+
+/* Button in last column */
+.searchtooltable-details-btn {
+  padding: 6px 12px;
+  background-color: #4a6fa5;
+  color: white;
+  border: none;
+  border-radius: 15px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.searchtooltable-details-btn:hover {
+  background-color: #3a56a0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(74, 111, 165, 0.2);
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
+  .searchtooltable {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    table-layout: auto; /* Revert to auto for mobile */
+  }
+  
+  .searchtooltable th,
+  .searchtooltable td {
+    width: auto; /* Remove fixed width on mobile */
+    padding: 8px 12px;
+  }
+}
+
+/* Modal Overlay Styles */
+.searchtool-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    /* Remove these flex properties */
+    /* justify-content: center;
+    align-items: center; */
+}
+
+/* h3 Title in Modal */
+.searchtool-modal-title {
+    color: #2c3e50;
+    margin: 0 0 15px 0;
+    font-size: 1.4em;
+    font-weight: 600;
+    text-align: left; /* Override parent's center alignment */
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+/* highlight search string */
+.search-highlight {
+    background-color: #FFF9C4;  /* Pale yellow */
+    padding: 2px 1px;
+    border-radius: 3px;
+    box-shadow: 0 0 2px rgba(0,0,0,0.2);
+    font-weight: bold;
+}
+
+/* pre-formatted content */
+.searchtool-modal-pre {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    text-align: left;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0 0 15px 0;
+    color: #333;
+	overflow-x: auto; /* For horizontal scrolling if needed */
+}
+
+.searchtool-modal-content {
+    position: absolute; /* For proper progress bar positioning */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #fefefe;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 600px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+#search-progress-container {
+    margin: 15px 0;
+    width: 100%;
+}
+
+#search-progress-bar {
+    height: 8px;
+    background-color: #4CAF50;
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s;
+}
+
+#search-progress-text {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+}
+
+/* Spinner Animation */
+.searchtool-spinner {
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Button Styles */
+.searchtool-modal-content button {
+    padding: 8px 16px;
+    margin: 10px 5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.searchtool-modal-content button:hover {
+    opacity: 0.9;
+}
+
+#abortBtn {
+    background-color: #e74c3c;
+    color: white;
+}
+
+#copyBtn {
+    background-color: #2ecc71;
+    color: white;
+}
+
+#closeBtn {
+    background-color: #95a5a6;
+    color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .searchtool-modal-content {
+        width: 90%;
+        padding: 15px;
+    }
+}
+
+#streamingToggle {
+    margin-left: 10px;
+    vertical-align: middle;
+}
+/* =========================== Search Tools Section - END =========================== */ 
+
+/* =========================== UNUSED - START =========================== */
+
+/**
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+.controls select,
+.controls button {
+  padding: 5px 10px;
+}
+
+#themeToggle {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+#logTableWrapper {
+  overflow-x: auto;
+}
+
+.xml-viewer {
+  position: relative;
+  background: var(--table-alt-row);
+  border: 1px solid var(--border-color);
+  padding: 10px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+pre.xml {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#xmlTools {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+}
+
+#xmlTools button {
+  padding: 4px 8px;
+}
+
+.section-header button {
+  padding: 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.log-error {
+  color: red;
+  font-weight: bold;
+}
+
+.log-warn {
+  color: orange;
+}
+
+.log-fatal {
+  color: white;
+  background-color: red;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+th.sortable.asc::after {
+  content: '⬆️';
+  opacity: 1;
+}
+
+th.sortable.desc::after {
+  content: '⬇️';
+  opacity: 1;
+}
+
+.controls {
+  display: none;
+}
+
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 60px; 
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
+
+.modal-content button {
+  margin-top: 1rem;
+  padding: 8px 16px;
+  border: none;
+  background-color: var(--highlight);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.modal-content button:hover {
+  background-color: #005fa3;
+}
+
+pre.xml-modal-content {
+  background: #f4f4f4;
+  padding: 1em;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modal .close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.modal .close:hover {
+  color: #000;
+}
+
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+#logContextModal .modal-content {
+  width: 90vw;
+  max-width: 1200px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  padding: 24px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.4;
+  border-radius: 12px;
+}
+
+#remoteLogOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6); 
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+#remoteLogOverlay.loading {
+  display: flex;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+pre.xml {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
+  background: #f4f4f4;
+  padding: 10px;
+  border: 1px solid #ccc;
+  max-height: 400px;
+  display: block;
+}
+
+.loading-message {
+  margin-top: 10px;
+  color: var(--text-primary);
+  font-style: italic;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0%   { opacity: 0.3; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+.xml-modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.6);
+}
+
+.xml-modal-content {
+  background-color: #fefefe;
+  margin: 10% auto;
+  padding: 20px;
+  border: 2px solid #888;
+  width: 80%;
+  max-height: 70%;
+  overflow-y: auto;
+  border-radius: 12px;
+}
+
+.xml-modal-close {
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.xml-modal-title {
+  margin-top: 0;
+  color: #007bff;
+}
+
+.xml-modal-pre {
+  white-space: pre-wrap;
+  min-height: 150px;
+  max-height: 500px;
+  overflow-y: auto;
+  background: #f4f4f4;
+  padding: 10px;
+  font-family: monospace;
+  border-radius: 8px;
+}
+
+**/
+/* =========================== UNUSED - end =========================== */ 
