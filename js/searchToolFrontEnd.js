@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const detailsContent = document.getElementById('detailsContent');
     const copyBtn = document.getElementById('copyBtn');
     const closeBtn = document.getElementById('closeBtn');
+	const refresListhSearchToolBtn = document.getElementById('refresListhSearchToolBtn');
+	
 	let useStreaming = true; // Set to false to use regular fetch
 
 	// Optional: Add a UI toggle (e.g., checkbox)
