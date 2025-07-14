@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
         detailsModal.style.display = 'none';
     });
 
-    // 🌟 NEW: Press ESC to abort (add this whole block)
+    // 🌟 Press ESC to abort
     document.addEventListener('keydown', (e) => {
         // Only work when search is in progress
         if (e.key === "Escape" && progressModal.style.display === 'flex') {
@@ -291,7 +291,13 @@ document.addEventListener('DOMContentLoaded', function() {
             abortBtn.click(); // Simulate button click
         }
     });
-
+	
+	// 🌟 Refresh log list dropdown
+	document.getElementById("refresListhSearchToolBtn").addEventListener("click", () => {
+	  console.log("🔄 Search Tool Refresh List button clicked.");
+    // ✅ Populate the fileSelect dropdown on page load
+    populateFileSelect();
+	});
 }); // <-- This is your existing closing bracket for DOMContentLoaded
 
 // ✅ Function to dynamically populate fileSelect dropdown
