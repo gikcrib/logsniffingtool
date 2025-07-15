@@ -253,8 +253,8 @@ async function analyzeLogs() {
 		(result.counts.WARN || 0) === 0
 	  ))
 	) {
-	  showNoLogsModal();  // ⬅️ Reuse the same "No Logs" overlay
-	  console.warn("🚫 No logs found to analyze (All Logs mode).");
+	  showNoLogsModal(); // Show no errors found modal
+	  console.warn("🚫 No errors found from the logs to analyze (All Logs mode).");
 	  return;
 	}
 
@@ -1269,4 +1269,3 @@ if (cancelBtn) {
   console.warn("⚠️ Cancel button not found in the DOM.");
 }
 });
-
