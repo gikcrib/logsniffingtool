@@ -1,33 +1,39 @@
 
 from fastapi import FastAPI, Request, Query, HTTPException, Response, BackgroundTasks
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from subprocess import Popen, PIPE
 from pathlib import Path
-import shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading
 from threading import Thread
-import psutil
-import subprocess
-import signal
-import zipfile
-import tarfile
-import gzip
-import traceback
 from xml.dom import minidom
 from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
+import uvicorn, shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading, psutil, signal, traceback, zipfile, tarfile, gzip
+
 
 # Initialize logging - Optimizing FastAPI Log Processing Application
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI
 app = FastAPI()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", port=8001, reload=True)  # Only runs with `python main.py`
 
 # Dictionary to store metrics - for psutil memory monitor
 endpoint_metrics = {}
@@ -81,7 +87,34 @@ LOG_DIR = './logs/'
 TIMESTAMP_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d{3}')
 THREAD_ID_PATTERN = re.compile(r'\[(\d{13}_\d{4}|NDC|REST)\]')
 
+# Exclude these compressed file extensions - view raw logs
+EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
+
+
 # --- Helper functions ---
+
+# View raw logs start 
+def is_compressed_file(filename):
+    """Check if file has a compressed extension"""
+    return any(filename.lower().endswith(ext) for ext in EXCLUDED_EXTENSIONS)
+
+def get_file_metadata(filepath):
+    """Get file metadata with performance logging"""
+    start_time = datetime.now()
+    size = filepath.stat().st_size
+    lines = 0
+    
+    # Count lines efficiently for the report
+    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+        lines = sum(1 for _ in f)
+    
+    duration = (datetime.now() - start_time).total_seconds()
+    return {
+        'size': size,
+        'lines': lines,
+        'processing_time': duration
+    }
+# View raw logs end 
 
 def is_compressed_file(filename):
     """Check if file is compressed by extension."""
@@ -212,6 +245,9 @@ def extract_service(line: str) -> str:
     return "UNKNOWN"
 
 def smart_preload_rqrs():
+    logger.info(f"[⚡] Smart preload started...")
+    process = psutil.Process(os.getpid())
+    logger.info(f"Memory before: {process.memory_info().rss / (1024 * 1024):.2f} MB")
     global RQRS_CACHE, LOG_CACHE_META
     updated_cache, updated_meta = {}, {}
 
@@ -248,8 +284,8 @@ def smart_preload_rqrs():
                         thread_id = next((x for x in bracketed if re.match(r'\d{13}_\d{4,}', x)), "UNKNOWN")
 
                     # 🪵 Debugging aid
-                    # print(f"[🧩 RQRS] smart_preload → source_line: {source_line}")
-                    # print(f"[🧩 RQRS] smart_preload → thread_id: {thread_id}")
+                    print(f"[🧩 RQRS] smart_preload → source_line: {source_line}")
+                    print(f"[🧩 RQRS] smart_preload → thread_id: {thread_id}")
 
                     root_tag = match.group(1)
                     entries.append({
@@ -264,10 +300,18 @@ def smart_preload_rqrs():
 
     RQRS_CACHE = updated_cache
     LOG_CACHE_META = updated_meta
+    logger.info(f"Memory after: {process.memory_info().rss / (1024 * 1024):.2f} MB")
+    logger.info(f"[⚡] Smart preload completed...")
 
 @app.on_event("startup")
 async def startup_event():
     smart_preload_rqrs()
+    """Log startup configuration - DOES NOT load any files"""
+    logger.info("FastAPI server starting up...")
+    logger.info("Configuration:")
+    logger.info("  - Log directory: %s", os.path.abspath(LOG_DIR))
+    logger.info("  - Will exclude these file extensions: %s", EXCLUDED_EXTENSIONS)
+    logger.info("Note: No log files are loaded at startup. Files are only loaded when explicitly requested via API.")
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui(request: Request):
@@ -697,6 +741,113 @@ def process_line(line_number: int, current: str, previous: str):
         "has_issue": bool(RX_ERRORS.search(current))
     }
 
+# async def parse_log_file(log: str):
+
+#     logger.info(f"🔍 Starting parse_log_file for: {log}")  # Debug
+#     cached_result = await LOG_CACHE.get(log)
+#     logger.info(f"🔍 LOG_CACHE check result: {cached_result is not None}")  # Debug
+#     if cached_result is not None:
+#         logger.info(f"[♻️] LRU Cache HIT for {log}")
+#         return cached_result
+
+#     logger.info(f"🔍 RQRS_CACHE contents: {list(RQRS_CACHE.keys())}")  # Debug
+#     if log in RQRS_CACHE:
+#         logger.info(f"[🔥] Preload Cache HIT for {log}")
+#         await LOG_CACHE.set(log, RQRS_CACHE[log])
+#         return RQRS_CACHE[log]
+#         print(f"Preloaded files: {list(RQRS_CACHE.keys())}")
+
+#     logger.info(f"🔍 Proceeding to file parsing...")  # Debug
+
+#     """Optimized log parser with dual-cache support (preload + LRU)"""
+#     # 1. First check AsyncLRUCache (LOG_CACHE)
+#     cached_result = await LOG_CACHE.get(log)
+#     if cached_result is not None:
+#         logger.info(f"[♻️] LRU Cache HIT for {log}")
+#         return cached_result
+
+#     # 2. Check preloaded RQRS_CACHE (if available)
+#     if log in RQRS_CACHE:
+#         logger.info(f"[🔥] Preload Cache HIT for {log}")
+#         await LOG_CACHE.set(log, RQRS_CACHE[log])  # Store in LRU cache
+#         return RQRS_CACHE[log]
+
+#     # 3. Only parse if not in either cache
+#     logger.info(f"[🔄] Cache MISS for {log}, processing...")
+#     start_time = time.time()
+#     last_progress_log = start_time
+#     last_match_time = start_time
+    
+#     if not memory_safe():
+#         raise HTTPException(503, detail="Server memory constrained")
+
+#     filepath = os.path.join(LOG_DIR, log)
+#     entries = []
+#     previous_line = ""
+
+#     # --- Line Counting Phase ---
+#     try:
+#         total_lines = 0
+#         async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
+#             async for _ in f:
+#                 total_lines += 1
+#     except FileNotFoundError:
+#         raise HTTPException(404, detail=f"Log file not found: {log}")
+
+#     # --- Processing Phase ---
+#     try:
+#         line_count = 0
+#         async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
+#             async for line in f:
+#                 line_count += 1
+#                 if line_count == 1:  # Skip header
+#                     continue
+                    
+#                 stripped = line.strip()
+#                 if "<" in stripped:  # Fast XML tag check
+#                     result = process_line(line_count, stripped, previous_line)
+#                     if result:
+#                         entries.append(result)
+#                         last_match_time = time.time()
+#                         logger.debug(f"[⚡] Found {result['tag']} at line {line_count}")
+                
+#                 previous_line = stripped
+                
+#                 # Fixed progress condition (added missing parenthesis)
+#                 if (time.time() - last_progress_log > 1.0) or (line_count % max(1, total_lines//100) == 0):
+#                     elapsed = time.time() - start_time
+#                     remaining = (elapsed / line_count) * (total_lines - line_count)
+#                     logger.info(
+#                         f"[📈] {log}: {line_count:,}/{total_lines:,} lines "
+#                         f"({(line_count/total_lines)*100:.1f}%) | "
+#                         f"ETA: {format_time(remaining)}"
+#                     )
+#                     last_progress_log = time.time()
+                
+#                 if line_count % 100 == 0:
+#                     await asyncio.sleep(0)
+
+#     except Exception as e:
+#         logger.error(f"Error processing {log}: {str(e)}", exc_info=True)
+#         raise HTTPException(500, detail="Internal server error")
+
+#     # --- Result Packaging ---
+#     elapsed_time = time.time() - start_time
+#     result = {
+#         "metadata": {
+#             "lines_processed": line_count,
+#             "total_lines": total_lines,
+#             "entries_found": len(entries),
+#             "elapsed_seconds": round(elapsed_time, 2),
+#             "processing_rate": round(line_count / elapsed_time, 1) if elapsed_time > 0 else 0,
+#             "last_match_at": round(last_match_time - start_time, 2)
+#         },
+#         "rqrs": entries
+#     }
+    
+#     await LOG_CACHE.set(log, result)
+#     return result
+
 async def parse_log_file(log: str):
     """Optimized main log parsing function with enhanced progress tracking"""
     # Cache check remains first (unchanged)
@@ -807,10 +958,22 @@ async def parse_log_file(log: str):
     
 @app.get("/get_rqrs")
 async def get_rqrs(log: str):
+    print(f"Preloaded files: {list(RQRS_CACHE.keys())}")
+    filepath = os.path.join(LOG_DIR, log)
+    logger.info(f"🔍 Looking for file at: {filepath}")
+    logger.info(f"🔍 File exists: {os.path.exists(filepath)}")
     """Endpoint that uses the optimized parser"""
     return await parse_log_file(log)
     
 ### Debugging cached parsed XMLs
+@app.get("/debug_rqrs_cache")
+async def debug_rqrs_cache():
+    return {
+        "file_count": len(RQRS_CACHE),
+        "sample_entry": list(RQRS_CACHE.items())[0] if RQRS_CACHE else None,
+        "meta_count": len(LOG_CACHE_META)
+    }
+
 @app.get("/debug_cache")
 async def debug_cache():
     return {
@@ -818,7 +981,7 @@ async def debug_cache():
         "cache_order": LOG_CACHE.order
     }
 
-# To get the cached parsed XML's status - http://127.0.0.1:8000/cache_status 
+# To get the cached parsed XML's status - http://127.0.0.1:8001/cache_status 
 @app.get("/cache_status")
 async def cache_status():
     logger.info(f"[✅] Checking cached parsed RQ/RS XMLs...")
@@ -828,7 +991,7 @@ async def cache_status():
         "next_to_evict": LOG_CACHE.order[0] if LOG_CACHE.order else None
     }
 
-# To flush the cached parsed XML's - http://127.0.0.1:8000/clear_cache
+# To flush the cached parsed XML's - http://127.0.0.1:8001/clear_cache
 @app.post("/clear_cache")
 async def clear_cache():
     logger.info(f"[✅] Flushing cached parsed RQ/RS XMLs...")
@@ -1225,36 +1388,325 @@ async def list_log_files():
 # --- END: List Log Files API ---
 
     
-# --- Backend Search API Implementation endpoints END ---    
+# --- Backend Search API Implementation endpoints END ---  
+
+##### View raw logs endpoints Start ######  
+### Files Dropdown Listing  
+@app.get("/api/logs/list")
+async def list_log_files():
+    """List all log files in the logs directory, excluding compressed files"""
+    try:
+        logger.info("Starting to scan log directory: %s", LOG_DIR)
+        start_time = datetime.now()
+        log_files = []
+        scanned_files = 0
+        
+        for file in Path(LOG_DIR).iterdir():
+            if file.is_file():
+                scanned_files += 1
+                if not is_compressed_file(file.name):
+                    metadata = get_file_metadata(file)
+                    log_files.append({
+                        "name": file.name,
+                        "path": str(file),
+                        "size": metadata['size'],
+                        "lines": metadata['lines']
+                    })
+                    logger.debug("Found log file: %s (Size: %s, Lines: %s)", 
+                               file.name, metadata['size'], metadata['lines'])
+        
+        duration = (datetime.now() - start_time).total_seconds()
+        logger.info(
+            "Completed directory scan. Files: %d (scanned %d). Time taken: %.2fs",
+            len(log_files), scanned_files, duration
+        )
+        
+        return JSONResponse(content={
+            "files": log_files,
+            "scan_metrics": {
+                "total_files_scanned": scanned_files,
+                "log_files_found": len(log_files),
+                "time_taken_seconds": duration
+            }
+        })
+    except Exception as e:
+        logger.error("Failed to list log files: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+### View Logs Streaming 
+@app.get("/api/logs/stream")
+async def stream_log_file(filename: str):
+    """Stream complete log file content in one pass"""
+    file_path = Path(LOG_DIR) / filename
+    
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if is_compressed_file(filename):
+        raise HTTPException(status_code=400, detail="Compressed files are not supported")
+
+    async def generate():
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            # Send all lines at once in a single JSON array
+            lines = []
+            for line in f:
+                lines.append(line.rstrip('\r\n'))
+            
+            yield json.dumps({
+                "status": "complete",
+                "lines": lines,
+                "total_lines": len(lines)
+            })
+
+    return StreamingResponse(generate(), media_type="application/json")
+
+
+def format_file_size(bytes):
+    """Format file size in human-readable format (e.g., KB, MB)"""
+    if bytes < 1024:
+        return f"{bytes} B"
+    if bytes < 1024 * 1024:
+        return f"{bytes / 1024:.1f} KB"
+    if bytes < 1024 * 1024 * 1024:
+        return f"{bytes / (1024 * 1024):.1f} MB"
+    return f"{bytes / (1024 * 1024 * 1024):.1f} GB"
+
+## DEAD CODES ##
+# @app.get("/api/logs/preview")
+# async def preview_log_file(filename: str, lines: int = 1000):
+#     """Preview first N lines of a log file with detailed logging"""
+#     """ACTUAL FILE LOAD - Only called when user clicks Load File"""
+#     try:
+#         logger.info("USER INITIATED FILE LOAD: %s (first %d lines)", filename, lines)
+#         start_time = datetime.now()
+        
+#         file_path = Path(LOG_DIR) / filename
+#         if not file_path.is_file():
+#             logger.warning("File not found: %s", filename)
+#             raise HTTPException(status_code=404, detail="File not found")
+        
+#         if is_compressed_file(filename):
+#             logger.warning("Attempted to preview compressed file: %s", filename)
+#             raise HTTPException(status_code=400, detail="Compressed files are not supported")
+        
+#         # Read only the first N lines efficiently
+#         lines_read = []
+#         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+#             for _ in range(lines):
+#                 line = f.readline()
+#                 if not line:
+#                     break
+#                 lines_read.append(line)
+        
+#         # Count total lines (for reporting)
+#         total_lines = 0
+#         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+#             total_lines = sum(1 for _ in f)
+        
+#         duration = (datetime.now() - start_time).total_seconds()
+#         logger.info(
+#             "Preview completed for %s. Lines returned: %d/%d. Time taken: %.2fs",
+#             filename, len(lines_read), total_lines, duration
+#         )
+        
+#         return JSONResponse(content={
+#             "filename": filename,
+#             "lines": lines_read,
+#             "total_lines": total_lines,
+#             "processing_metrics": {
+#                 "time_taken_seconds": duration,
+#                 "file_size_bytes": file_path.stat().st_size
+#             }
+#         })
+#     except Exception as e:
+#         logger.error("Failed to preview file %s: %s", filename, str(e), exc_info=True)
+#         raise HTTPException(status_code=500, detail=str(e))
+
+# @app.get("/api/logs/search")
+# async def search_in_log(filename: str, query: str, max_results: int = 100):
+#     """Search for a string in a log file with detailed logging"""
+#     try:
+#         logger.info(
+#             "Starting search in file: %s (Query: '%s', Max results: %d)",
+#             filename, query, max_results
+#         )
+#         start_time = datetime.now()
+        
+#         file_path = Path(LOG_DIR) / filename
+#         if not file_path.is_file():
+#             logger.warning("File not found for search: %s", filename)
+#             raise HTTPException(status_code=404, detail="File not found")
+        
+#         if is_compressed_file(filename):
+#             logger.warning("Attempted to search compressed file: %s", filename)
+#             raise HTTPException(status_code=400, detail="Compressed files are not supported")
+        
+#         results = []
+#         lines_processed = 0
+#         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+#             for line_num, line in enumerate(f, 1):
+#                 lines_processed = line_num
+#                 if query.lower() in line.lower():
+#                     results.append({
+#                         "line_number": line_num,
+#                         "content": line.strip()
+#                     })
+#                     if len(results) >= max_results:
+#                         break
+        
+#         duration = (datetime.now() - start_time).total_seconds()
+#         logger.info(
+#             "Search completed in %s. Matches: %d/%d lines processed. Time taken: %.2fs",
+#             filename, len(results), lines_processed, duration
+#         )
+        
+#         return JSONResponse(content={
+#             "filename": filename,
+#             "query": query,
+#             "results": results,
+#             "total_matches": len(results),
+#             "processing_metrics": {
+#                 "lines_processed": lines_processed,
+#                 "time_taken_seconds": duration,
+#                 "file_size_bytes": file_path.stat().st_size
+#             }
+#         })
+#     except Exception as e:
+#         logger.error("Failed to search in file %s: %s", filename, str(e), exc_info=True)
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
+##### View raw logs endpoints END ######  
 
 #### Memory and resources monitoring
-#### http://127.0.0.1:8000/monitor
+#### http://127.0.0.1:8001/monitor
+def get_process_info(pid):
+    """Get detailed information about a specific process"""
+    try:
+        proc = psutil.Process(pid)
+        with proc.oneshot():  # Optimize for multiple info retrieval
+            return {
+                "pid": pid,
+                "name": proc.name(),
+                "exe": proc.exe(),
+                "cmdline": proc.cmdline(),
+                "memory": {
+                    "rss": proc.memory_info().rss,
+                    "vms": proc.memory_info().vms,
+                    "shared": proc.memory_info().shared,
+                    "uss": proc.memory_full_info().uss if hasattr(proc, 'memory_full_info') else 0,
+                    "pss": proc.memory_full_info().pss if hasattr(proc, 'memory_full_info') else 0,
+                },
+                "memory_percent": proc.memory_percent(),
+                "cpu_percent": proc.cpu_percent(),
+                "cpu_times": proc.cpu_times(),
+                "status": proc.status(),
+                "create_time": proc.create_time(),
+                "threads": proc.num_threads(),
+                "connections": len(proc.connections()),
+                "open_files": len(proc.open_files()),
+                "is_browser": any(browser in proc.name().lower() 
+                                 for browser in ['chrome', 'firefox', 'edge', 'msedge', 'iexplore'])
+            }
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return None
+
+def find_all_processes():
+    """Find all relevant processes including browsers and system processes"""
+    processes = []
+    browser_names = ['chrome', 'firefox', 'edge', 'msedge', 'iexplore']
+    
+    # Get top memory-consuming processes
+    all_procs = []
+    for proc in psutil.process_iter(['pid', 'name', 'memory_percent']):
+        try:
+            all_procs.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    
+    # Sort by memory usage and get top processes
+    top_procs = sorted(all_procs, key=lambda p: p.info['memory_percent'], reverse=True)[:25]
+    
+    # Get detailed info for top processes
+    for proc in top_procs:
+        try:
+            proc_info = get_process_info(proc.info['pid'])
+            if proc_info:
+                processes.append(proc_info)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    
+    return processes
+
 @app.get("/memory-stream")
 async def memory_stream():
-    """Stream memory usage in real-time (system + Python process)"""
+    """Stream comprehensive system and process metrics"""
     async def event_generator():
-        current_process = psutil.Process(os.getpid())  # Track current Python process
         while True:
-            # System-wide memory
+            # System-wide metrics
             sys_mem = psutil.virtual_memory()
-            # Python process memory
-            py_mem = current_process.memory_info()
+            sys_swap = psutil.swap_memory()
+            sys_cpu = psutil.cpu_percent(interval=1, percpu=True)
+            sys_cpu_avg = sum(sys_cpu) / len(sys_cpu) if sys_cpu else 0
+            sys_disk = psutil.disk_usage('/')
+            sys_net = psutil.net_io_counters()
+            sys_temp = psutil.sensors_temperatures() if hasattr(psutil, 'sensors_temperatures') else {}
+            sys_battery = psutil.sensors_battery() if hasattr(psutil, 'sensors_battery') else None
+            
+            # Get all relevant processes
+            processes = find_all_processes()
+            
+            # Current Python process metrics
+            current_process = get_process_info(os.getpid())
             
             data = {
+                "timestamp": psutil.time.time(),
                 "system": {
-                    "total": sys_mem.total,
-                    "available": sys_mem.available,
-                    "used": sys_mem.used,
-                    "free": sys_mem.free,
-                    "percent": sys_mem.percent
+                    "memory": {
+                        "total": sys_mem.total,
+                        "available": sys_mem.available,
+                        "used": sys_mem.used,
+                        "free": sys_mem.free,
+                        "percent": sys_mem.percent,
+                        "active": getattr(sys_mem, 'active', 0),
+                        "inactive": getattr(sys_mem, 'inactive', 0),
+                        "buffers": getattr(sys_mem, 'buffers', 0),
+                        "cached": getattr(sys_mem, 'cached', 0),
+                        "shared": getattr(sys_mem, 'shared', 0),
+                    },
+                    "swap": {
+                        "total": sys_swap.total,
+                        "used": sys_swap.used,
+                        "free": sys_swap.free,
+                        "percent": sys_swap.percent,
+                        "sin": sys_swap.sin,
+                        "sout": sys_swap.sout,
+                    },
+                    "cpu": {
+                        "percent": sys_cpu_avg,
+                        "per_cpu": sys_cpu,
+                        "count": psutil.cpu_count(),
+                        "freq": psutil.cpu_freq().current if hasattr(psutil, 'cpu_freq') else 0,
+                    },
+                    "disk": {
+                        "total": sys_disk.total,
+                        "used": sys_disk.used,
+                        "free": sys_disk.free,
+                        "percent": sys_disk.percent,
+                    },
+                    "network": {
+                        "bytes_sent": sys_net.bytes_sent,
+                        "bytes_recv": sys_net.bytes_recv,
+                        "packets_sent": sys_net.packets_sent,
+                        "packets_recv": sys_net.packets_recv,
+                    },
+                    "temperature": sys_temp,
+                    "battery": sys_battery,
                 },
-                "python": {
-                    "rss": py_mem.rss,  # Resident Set Size (actual RAM used)
-                    "vms": py_mem.vms,   # Virtual Memory Size
-                    "percent": current_process.memory_percent()
-                }
+                "python_process": current_process,
+                "top_processes": processes,
             }
-            # Yield the data as SSE formatted string
+            
             yield f"data: {json.dumps(data)}\n\n"
             await asyncio.sleep(1)  # Update every second
     
@@ -1262,12 +1714,12 @@ async def memory_stream():
 
 @app.get("/monitor", response_class=HTMLResponse)
 async def monitor_page():
-    """Serve a monitoring page with both system and Python memory stats"""
+    """Serve a comprehensive monitoring dashboard"""
     return """
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Memory Monitor (System + Python)</title>
+        <title>Advanced System Monitor</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             .metric { margin-bottom: 10px; }
@@ -1295,58 +1747,435 @@ async def monitor_page():
                 border-radius: 5px;
             }
             h2 { color: #444; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-            #system-bar { background-color: #4CAF50; }
-            #python-bar { background-color: #2196F3; }
+            h3 { color: #666; margin-top: 15px; }
+            #system-memory-bar { background-color: #4CAF50; }
+            #system-cpu-bar { background-color: #FF9800; }
+            #system-swap-bar { background-color: #607D8B; }
+            #python-memory-bar { background-color: #2196F3; }
+            #python-cpu-bar { background-color: #9C27B0; }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 15px;
+                font-size: 14px;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f2f2f2;
+                position: sticky;
+                top: 0;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            tr:hover {
+                background-color: #f1f1f1;
+            }
+            .browser-process {
+                background-color: #FFF3E0;
+            }
+            .critical-process {
+                background-color: #FFEBEE;
+            }
+            .grid-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+            .grid-item {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 10px;
+            }
+            .memory-cell {
+                width: 120px;
+            }
+            .cpu-cell {
+                width: 80px;
+            }
+            .chart-container {
+                width: 100%;
+                height: 200px;
+                margin: 20px 0;
+            }
+            .tab {
+                overflow: hidden;
+                border: 1px solid #ccc;
+                background-color: #f1f1f1;
+                border-radius: 5px 5px 0 0;
+            }
+            .tab button {
+                background-color: inherit;
+                float: left;
+                border: none;
+                outline: none;
+                cursor: pointer;
+                padding: 10px 16px;
+                transition: 0.3s;
+            }
+            .tab button:hover {
+                background-color: #ddd;
+            }
+            .tab button.active {
+                background-color: #ccc;
+            }
+            .tabcontent {
+                display: none;
+                padding: 15px;
+                border: 1px solid #ccc;
+                border-top: none;
+                border-radius: 0 0 5px 5px;
+            }
+            .visible {
+                display: block;
+            }
         </style>
     </head>
     <body>
-        <h1>Real-Time Memory Monitor</h1>
+        <h1>Advanced System Monitor</h1>
         
-        <div class="section">
-            <h2>System Memory</h2>
-            <div class="progress-container">
-                <div id="system-bar" class="progress-bar" style="width: 0%">0%</div>
-            </div>
-            <div class="metric">Total Memory: <span id="sys-total" class="metric-value">0</span> MB</div>
-            <div class="metric">Available: <span id="sys-available" class="metric-value">0</span> MB</div>
-            <div class="metric">Used: <span id="sys-used" class="metric-value">0</span> MB</div>
-            <div class="metric">Free: <span id="sys-free" class="metric-value">0</span> MB</div>
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'system')">System</button>
+            <button class="tablinks" onclick="openTab(event, 'python')">Python Process</button>
+            <button class="tablinks" onclick="openTab(event, 'processes')">All Processes</button>
+            <button class="tablinks" onclick="openTab(event, 'network')">Network</button>
         </div>
         
-        <div class="section">
-            <h2>Python Process Memory</h2>
-            <div class="progress-container">
-                <div id="python-bar" class="progress-bar" style="width: 0%">0%</div>
+        <div id="system" class="tabcontent visible">
+            <h2>System Resources</h2>
+            
+            <div class="grid-container">
+                <div class="grid-item">
+                    <h3>Memory Usage</h3>
+                    <div class="progress-container">
+                        <div id="system-memory-bar" class="progress-bar" style="width: 0%">0%</div>
+                    </div>
+                    <div class="metric">Total: <span id="sys-mem-total" class="metric-value">0</span> GB</div>
+                    <div class="metric">Used: <span id="sys-mem-used" class="metric-value">0</span> GB</div>
+                    <div class="metric">Available: <span id="sys-mem-available" class="metric-value">0</span> GB</div>
+                    <div class="metric">Active: <span id="sys-mem-active" class="metric-value">0</span> GB</div>
+                    <div class="metric">Cached: <span id="sys-mem-cached" class="metric-value">0</span> GB</div>
+                </div>
+                
+                <div class="grid-item">
+                    <h3>CPU Usage</h3>
+                    <div class="progress-container">
+                        <div id="system-cpu-bar" class="progress-bar" style="width: 0%">0%</div>
+                    </div>
+                    <div class="metric">Cores: <span id="sys-cpu-count" class="metric-value">0</span></div>
+                    <div class="metric">Frequency: <span id="sys-cpu-freq" class="metric-value">0</span> MHz</div>
+                    <div id="per-cpu-usage"></div>
+                </div>
+                
+                <div class="grid-item">
+                    <h3>Swap Memory</h3>
+                    <div class="progress-container">
+                        <div id="system-swap-bar" class="progress-bar" style="width: 0%">0%</div>
+                    </div>
+                    <div class="metric">Total: <span id="sys-swap-total" class="metric-value">0</span> GB</div>
+                    <div class="metric">Used: <span id="sys-swap-used" class="metric-value">0</span> GB</div>
+                    <div class="metric">Free: <span id="sys-swap-free" class="metric-value">0</span> GB</div>
+                </div>
+                
+                <div class="grid-item">
+                    <h3>Disk Usage</h3>
+                    <div class="progress-container">
+                        <div id="system-disk-bar" class="progress-bar" style="width: 0%">0%</div>
+                    </div>
+                    <div class="metric">Total: <span id="sys-disk-total" class="metric-value">0</span> GB</div>
+                    <div class="metric">Used: <span id="sys-disk-used" class="metric-value">0</span> GB</div>
+                    <div class="metric">Free: <span id="sys-disk-free" class="metric-value">0</span> GB</div>
+                </div>
             </div>
-            <div class="metric">RSS (Resident Memory): <span id="py-rss" class="metric-value">0</span> MB</div>
-            <div class="metric">VMS (Virtual Memory): <span id="py-vms" class="metric-value">0</span> MB</div>
-            <div class="metric">Memory %: <span id="py-percent" class="metric-value">0</span>%</div>
+            
+            <h3>Temperature Sensors</h3>
+            <div id="temperature-sensors"></div>
+            
+            <h3>Battery Status</h3>
+            <div id="battery-status"></div>
+        </div>
+        
+        <div id="python" class="tabcontent">
+            <h2>Python Process Resources</h2>
+            
+            <div class="grid-container">
+                <div class="grid-item">
+                    <h3>Memory Usage</h3>
+                    <div class="progress-container">
+                        <div id="python-memory-bar" class="progress-bar" style="width: 0%">0%</div>
+                    </div>
+                    <div class="metric">RSS: <span id="py-rss" class="metric-value">0</span> MB</div>
+                    <div class="metric">VMS: <span id="py-vms" class="metric-value">0</span> MB</div>
+                    <div class="metric">USS: <span id="py-uss" class="metric-value">0</span> MB</div>
+                    <div class="metric">PSS: <span id="py-pss" class="metric-value">0</span> MB</div>
+                    <div class="metric">Memory %: <span id="py-memory-percent" class="metric-value">0</span>%</div>
+                </div>
+                
+                <div class="grid-item">
+                    <h3>CPU Usage</h3>
+                    <div class="progress-container">
+                        <div id="python-cpu-bar" class="progress-bar" style="width: 0%">0%</div>
+                    </div>
+                    <div class="metric">CPU %: <span id="py-cpu-percent" class="metric-value">0</span>%</div>
+                    <div class="metric">Threads: <span id="py-threads" class="metric-value">0</span></div>
+                    <div class="metric">User Time: <span id="py-cpu-user" class="metric-value">0</span>s</div>
+                    <div class="metric">System Time: <span id="py-cpu-system" class="metric-value">0</span>s</div>
+                </div>
+                
+                <div class="grid-item">
+                    <h3>Process Info</h3>
+                    <div class="metric">PID: <span id="py-pid" class="metric-value">0</span></div>
+                    <div class="metric">Name: <span id="py-name" class="metric-value">-</span></div>
+                    <div class="metric">Status: <span id="py-status" class="metric-value">-</span></div>
+                    <div class="metric">Created: <span id="py-created" class="metric-value">-</span></div>
+                    <div class="metric">Open Files: <span id="py-open-files" class="metric-value">0</span></div>
+                    <div class="metric">Connections: <span id="py-connections" class="metric-value">0</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="processes" class="tabcontent">
+            <h2>All Processes (Top 25 by Memory)</h2>
+            <div class="metric">Showing <span id="process-count" class="metric-value">0</span> processes</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>PID</th>
+                        <th>Name</th>
+                        <th class="memory-cell">Memory (MB)</th>
+                        <th>Memory %</th>
+                        <th class="cpu-cell">CPU %</th>
+                        <th>Threads</th>
+                        <th>Status</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody id="process-table-body">
+                    <!-- Process data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div id="network" class="tabcontent">
+            <h2>Network Activity</h2>
+            <div class="grid-container">
+                <div class="grid-item">
+                    <h3>Network Usage</h3>
+                    <div class="metric">Sent: <span id="net-sent" class="metric-value">0</span> MB</div>
+                    <div class="metric">Received: <span id="net-recv" class="metric-value">0</span> MB</div>
+                    <div class="metric">Packets Sent: <span id="net-packets-sent" class="metric-value">0</span></div>
+                    <div class="metric">Packets Received: <span id="net-packets-recv" class="metric-value">0</span></div>
+                </div>
+            </div>
         </div>
         
         <script>
+            // Tab functionality
+            function openTab(evt, tabName) {
+                const tabcontent = document.getElementsByClassName("tabcontent");
+                for (let i = 0; i < tabcontent.length; i++) {
+                    tabcontent[i].classList.remove("visible");
+                }
+                
+                const tablinks = document.getElementsByClassName("tablinks");
+                for (let i = 0; i < tablinks.length; i++) {
+                    tablinks[i].classList.remove("active");
+                }
+                
+                document.getElementById(tabName).classList.add("visible");
+                evt.currentTarget.classList.add("active");
+            }
+            
+            // Format bytes to human-readable format
+            function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+            
+            // Format seconds to human-readable time
+            function formatTime(seconds) {
+                if (seconds < 60) return seconds.toFixed(1) + 's';
+                const minutes = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return minutes + 'm ' + secs.toFixed(0) + 's';
+            }
+            
+            // Format timestamp to readable date
+            function formatTimestamp(timestamp) {
+                if (!timestamp) return '-';
+                const date = new Date(timestamp * 1000);
+                return date.toLocaleString();
+            }
+            
             const eventSource = new EventSource('/memory-stream');
             
             eventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 
                 // Update System Memory
-                const sysPercent = data.system.percent;
-                document.getElementById('system-bar').style.width = `${sysPercent}%`;
-                document.getElementById('system-bar').textContent = `${sysPercent.toFixed(1)}%`;
+                const sysMemPercent = data.system.memory.percent;
+                document.getElementById('system-memory-bar').style.width = `${sysMemPercent}%`;
+                document.getElementById('system-memory-bar').textContent = `${sysMemPercent.toFixed(1)}%`;
                 
-                document.getElementById('sys-total').textContent = (data.system.total / 1024 / 1024).toFixed(1);
-                document.getElementById('sys-available').textContent = (data.system.available / 1024 / 1024).toFixed(1);
-                document.getElementById('sys-used').textContent = (data.system.used / 1024 / 1024).toFixed(1);
-                document.getElementById('sys-free').textContent = (data.system.free / 1024 / 1024).toFixed(1);
+                document.getElementById('sys-mem-total').textContent = (data.system.memory.total / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-mem-used').textContent = (data.system.memory.used / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-mem-available').textContent = (data.system.memory.available / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-mem-active').textContent = (data.system.memory.active / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-mem-cached').textContent = (data.system.memory.cached / 1024 / 1024 / 1024).toFixed(2);
                 
-                // Update Python Memory
-                const pyPercent = data.python.percent;
-                document.getElementById('python-bar').style.width = `${pyPercent}%`;
-                document.getElementById('python-bar').textContent = `${pyPercent.toFixed(1)}%`;
+                // Update System CPU
+                const sysCpuPercent = data.system.cpu.percent;
+                document.getElementById('system-cpu-bar').style.width = `${sysCpuPercent}%`;
+                document.getElementById('system-cpu-bar').textContent = `${sysCpuPercent.toFixed(1)}%`;
+                document.getElementById('sys-cpu-count').textContent = data.system.cpu.count;
+                document.getElementById('sys-cpu-freq').textContent = data.system.cpu.freq.toFixed(0);
                 
-                document.getElementById('py-rss').textContent = (data.python.rss / 1024 / 1024).toFixed(1);
-                document.getElementById('py-vms').textContent = (data.python.vms / 1024 / 1024).toFixed(1);
-                document.getElementById('py-percent').textContent = pyPercent.toFixed(1);
+                // Update per-CPU usage
+                let perCpuHtml = '';
+                if (data.system.cpu.per_cpu && data.system.cpu.per_cpu.length > 0) {
+                    perCpuHtml = '<div class="metric">Per Core:</div>';
+                    data.system.cpu.per_cpu.forEach((cpu, idx) => {
+                        perCpuHtml += `
+                            <div class="metric">
+                                Core ${idx}: 
+                                <div class="progress-container" style="display: inline-block; width: 100px; margin-left: 10px;">
+                                    <div class="progress-bar" style="width: ${cpu}%; background-color: ${cpu > 80 ? '#F44336' : '#FF9800'}">${cpu.toFixed(1)}%</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                document.getElementById('per-cpu-usage').innerHTML = perCpuHtml;
+                
+                // Update System Swap
+                const sysSwapPercent = data.system.swap.percent;
+                document.getElementById('system-swap-bar').style.width = `${sysSwapPercent}%`;
+                document.getElementById('system-swap-bar').textContent = `${sysSwapPercent.toFixed(1)}%`;
+                
+                document.getElementById('sys-swap-total').textContent = (data.system.swap.total / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-swap-used').textContent = (data.system.swap.used / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-swap-free').textContent = (data.system.swap.free / 1024 / 1024 / 1024).toFixed(2);
+                
+                // Update System Disk
+                const sysDiskPercent = data.system.disk.percent;
+                document.getElementById('system-disk-bar').style.width = `${sysDiskPercent}%`;
+                document.getElementById('system-disk-bar').textContent = `${sysDiskPercent.toFixed(1)}%`;
+                
+                document.getElementById('sys-disk-total').textContent = (data.system.disk.total / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-disk-used').textContent = (data.system.disk.used / 1024 / 1024 / 1024).toFixed(2);
+                document.getElementById('sys-disk-free').textContent = (data.system.disk.free / 1024 / 1024 / 1024).toFixed(2);
+                
+                // Update Temperature Sensors
+                let tempHtml = '';
+                if (data.system.temperature && Object.keys(data.system.temperature).length > 0) {
+                    for (const [name, sensors] of Object.entries(data.system.temperature)) {
+                        tempHtml += `<h4>${name}</h4>`;
+                        sensors.forEach(sensor => {
+                            tempHtml += `
+                                <div class="metric">
+                                    ${sensor.label || 'Sensor'}: 
+                                    <span class="metric-value">${sensor.current}°C</span>
+                                    (High: ${sensor.high}°C, Critical: ${sensor.critical}°C)
+                                </div>
+                            `;
+                        });
+                    }
+                } else {
+                    tempHtml = '<div class="metric">No temperature sensors available</div>';
+                }
+                document.getElementById('temperature-sensors').innerHTML = tempHtml;
+                
+                // Update Battery Status
+                let batteryHtml = '';
+                if (data.system.battery) {
+                    batteryHtml = `
+                        <div class="metric">Percent: <span class="metric-value">${data.system.battery.percent}%</span></div>
+                        <div class="metric">Power Plugged: <span class="metric-value">${data.system.battery.power_plugged ? 'Yes' : 'No'}</span></div>
+                        ${data.system.battery.secsleft ? `<div class="metric">Time Left: <span class="metric-value">${formatTime(data.system.battery.secsleft)}</span></div>` : ''}
+                    `;
+                } else {
+                    batteryHtml = '<div class="metric">No battery information available</div>';
+                }
+                document.getElementById('battery-status').innerHTML = batteryHtml;
+                
+                // Update Python Process
+                if (data.python_process) {
+                    const py = data.python_process;
+                    
+                    // Python Memory
+                    const pyMemPercent = py.memory_percent;
+                    document.getElementById('python-memory-bar').style.width = `${pyMemPercent}%`;
+                    document.getElementById('python-memory-bar').textContent = `${pyMemPercent.toFixed(1)}%`;
+                    
+                    document.getElementById('py-rss').textContent = (py.memory.rss / 1024 / 1024).toFixed(1);
+                    document.getElementById('py-vms').textContent = (py.memory.vms / 1024 / 1024).toFixed(1);
+                    document.getElementById('py-uss').textContent = (py.memory.uss / 1024 / 1024).toFixed(1);
+                    document.getElementById('py-pss').textContent = (py.memory.pss / 1024 / 1024).toFixed(1);
+                    document.getElementById('py-memory-percent').textContent = pyMemPercent.toFixed(1);
+                    
+                    // Python CPU
+                    const pyCpuPercent = py.cpu_percent;
+                    document.getElementById('python-cpu-bar').style.width = `${pyCpuPercent}%`;
+                    document.getElementById('python-cpu-bar').textContent = `${pyCpuPercent.toFixed(1)}%`;
+                    
+                    document.getElementById('py-cpu-percent').textContent = pyCpuPercent.toFixed(1);
+                    document.getElementById('py-threads').textContent = py.threads;
+                    document.getElementById('py-cpu-user').textContent = py.cpu_times ? py.cpu_times.user.toFixed(1) : '0';
+                    document.getElementById('py-cpu-system').textContent = py.cpu_times ? py.cpu_times.system.toFixed(1) : '0';
+                    
+                    // Python Process Info
+                    document.getElementById('py-pid').textContent = py.pid;
+                    document.getElementById('py-name').textContent = py.name;
+                    document.getElementById('py-status').textContent = py.status;
+                    document.getElementById('py-created').textContent = formatTimestamp(py.create_time);
+                    document.getElementById('py-open-files').textContent = py.open_files;
+                    document.getElementById('py-connections').textContent = py.connections;
+                }
+                
+                // Update Process Table
+                const processTableBody = document.getElementById('process-table-body');
+                processTableBody.innerHTML = '';
+                
+                if (data.top_processes && data.top_processes.length > 0) {
+                    document.getElementById('process-count').textContent = data.top_processes.length;
+                    
+                    data.top_processes.forEach(proc => {
+                        const row = document.createElement('tr');
+                        if (proc.is_browser) {
+                            row.classList.add('browser-process');
+                        } else if (proc.memory_percent > 10 || proc.cpu_percent > 50) {
+                            row.classList.add('critical-process');
+                        }
+                        
+                        row.innerHTML = `
+                            <td>${proc.pid}</td>
+                            <td>${proc.name}</td>
+                            <td class="memory-cell">${(proc.memory.rss / 1024 / 1024).toFixed(1)}</td>
+                            <td>${proc.memory_percent.toFixed(1)}</td>
+                            <td class="cpu-cell">${proc.cpu_percent.toFixed(1)}</td>
+                            <td>${proc.threads}</td>
+                            <td>${proc.status}</td>
+                            <td>${proc.is_browser ? 'Browser' : 'System'}</td>
+                        `;
+                        
+                        processTableBody.appendChild(row);
+                    });
+                }
+                
+                // Update Network
+                document.getElementById('net-sent').textContent = (data.system.network.bytes_sent / 1024 / 1024).toFixed(2);
+                document.getElementById('net-recv').textContent = (data.system.network.bytes_recv / 1024 / 1024).toFixed(2);
+                document.getElementById('net-packets-sent').textContent = data.system.network.packets_sent;
+                document.getElementById('net-packets-recv').textContent = data.system.network.packets_recv;
             };
             
             // Handle errors

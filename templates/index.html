@@ -24,13 +24,20 @@
         <!-- Tab Navigation -->
         <div class="tab-container">
             <div class="tab-header">
-                <button class="tab-button active" data-tab="error-tab">Error Summary</button>
+                <button class="tab-button active" data-tab="logsmanage-tab">Manage Logs</button>
+                <button class="tab-button" data-tab="error-tab">Error Summary</button>
                 <button class="tab-button" data-tab="soap-tab">Parsed XMLs</button>
                 <button class="tab-button" data-tab="search-tab">Search Tools</button>
+				<button class="tab-button" data-tab="rawlogs-tab">View Raw Logs</button>
             </div>
 
+            <!-- Manage Logs Tab -->
+            <div id="logsmanage-tab" class="tab-content active">
+			
+			</div>
+			
             <!-- Error Summary Tab -->
-            <div id="error-tab" class="tab-content active">
+            <div id="error-tab" class="tab-content">
 
 				 <div class="section-header">
 					<h2>📄 Summary of Errors Found</h2>
@@ -129,6 +136,11 @@
                     <label><input type="checkbox" id="rqrsDlxCheckbox" disabled> Filter DLX services</label>
                     <label><input type="checkbox" id="rqrsErrorCheckbox" disabled> Filter Errors</label>
                     <button id="rqrsClearFiltersBtn" disabled>❌ Clear Filters</button>
+					<select id="fileSelect" class="searchtoolfilters-select">
+					  <option value="">-- Select Target File --</option>
+					</select>
+					<button id="refresListhSearchToolBtn" class="searchtoolfilters-button" title="Refresh Log List">🔄 Refresh List</button>
+					<button id="" class="searchtoolfilters-button">🔍 XML Parser</button>
                 </div>
                 <div class="rqrs-table-container">
                     <table id="rqrsTable" class="log-table">
@@ -216,7 +228,46 @@
 					<button id="closeBtn">❌ Close</button>
 				  </div>
 				</div>
-        </div>
+
+				 
+
+				<!-- View Raw Logs Tab -->
+				<div id="rawlogs-tab" class="tab-content">
+					<!-- 🔍 View Raw Logs Section START -->
+					<div class="section-header">
+						<h2>🔍 View Logs Tool</h2>
+					</div>
+
+					<!-- 🔍 View Logs options -->
+					<div class="logview-controls">
+						<label class="logview-label" style="margin-left: 1rem;">🔍 Select File:</label>
+						<select id="logview-file-select" class="logview-file-select">
+							<option value="">-- Select Target File --</option>
+						</select>
+						<button id="logview-refresh-btn" class="logview-refresh-btn" title="Refresh Log List">🔄 Refresh</button>
+						<button id="logview-load-btn" class="logview-load-btn" title="Load Selected File">📁 Load File</button>
+					</div><br>
+					<div class="logview-controls">
+						<input type="text" id="logview-search-input" class="logview-search-input" placeholder="✏️ Type here and click Search.">
+						<label><input type="checkbox" id="logview-whole-word">✅ Whole word</label>
+						<button id="logview-search-btn" class="logview-search-btn" title="🔍 Search">🔍 Search</button>
+						<button id="logview-prev-btn" class="logview-icon-btn" title="Find Previous">Prev ⏪</button>
+						<button id="logview-next-btn" class="logview-icon-btn" title="Find Next">Next ⏩</button>
+						<button id="logview-goto-btn" class="logview-goto-btn" title="Go to line">🔍 Go To</button>
+						<input type="number" id="logview-goto-input" class="logview-goto-input" placeholder="Line number">
+						<button id="logview-copy-btn" class="logview-copy-btn">📋 Copy</button>
+					</div>
+
+					<!-- Status bar -->
+					<div id="logview-status" class="logview-status">Ready</div>
+
+					<!-- Log file viewport -->
+					<div id="logview-viewport" class="logview-viewport">
+						<div id="logview-content" class="logview-content"></div>
+					</div>
+
+				</div>
+        </div> <!-- End of tabs -->
 
         <!-- All modal dialogs remain here (unchanged) -->
 
@@ -419,6 +470,8 @@
         <!-- JavaScript Files -->
         <script src="./js/mainFrontEnd.js"></script>
         <script src="./js/searchToolFrontEnd.js"></script>
+		<script src="./js/viewrawlogs.js"></script>
+		
 		 <!-- JavaScript Script for the tabular page -->
          <script>
             document.addEventListener('DOMContentLoaded', function() {

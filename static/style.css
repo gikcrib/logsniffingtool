@@ -416,11 +416,14 @@ select:disabled option {
 }
 
 .loading-spinner {
-  padding: 1em;
-  font-weight: bold;
-  color: #444;
-  font-size: 1rem;
-  text-align: center;
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0,0,0,0.1);
+    border-radius: 50%;
+    border-top-color: #4a6fa5;
+    animation: spin 1s ease-in-out infinite;
+    margin-left: 10px;
 }
 [data-theme="dark"] .loading-spinner {
   color: #eee;
@@ -1237,8 +1240,7 @@ pre, .xml-viewer {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* Button Styles */
@@ -1283,6 +1285,228 @@ pre, .xml-viewer {
     margin-left: 10px;
     vertical-align: middle;
 }
+
+/*** Log Viewer Styles START ***/
+.logview-file-select {
+    min-width: 300px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+
+.logview-refresh-btn,
+.logview-load-btn,
+.logview-search-btn,
+.logview-icon-btn,
+.logview-copy-btn {
+    padding: 8px 12px;
+    margin: 0 4px;
+    background-color: #4a6fa5;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.logview-refresh-btn:hover,
+.logview-load-btn:hover,
+.logview-search-btn:hover,
+.logview-icon-btn:hover,
+.logview-copy-btn:hover {
+    background-color: #3a5a80;
+}
+
+#logview-prev-btn {
+    border-radius: 0;
+    margin-left: 0;
+}
+
+#logview-next-btn {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.logview-search-input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    min-width: 250px;
+    margin: 0 4px;
+}
+
+.logview-viewport {
+    width: 100%;
+    height: 70vh;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    margin-top: 16px;
+    background-color: #f8f9fa;
+    position: relative;
+    scroll-behavior: smooth;
+}
+
+.logview-content {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 18px;
+    white-space: pre;
+    contain: content; /* Improves rendering performance */
+}
+
+.logview-line {
+    margin: 0;
+    padding: 0;
+    min-height: 18px;
+    line-height: 18px;
+    display: flex;
+}
+
+.logview-line-number {
+    min-width: 60px;
+    padding-right: 8px;
+    text-align: left;
+    color: #666;
+    background-color: #f0f0f0;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.logview-line-content {
+    padding-left: 8px;
+    white-space: pre;
+    word-break: break-all;
+    flex-grow: 1;
+}
+
+.logview-line-highlight {
+    background-color: #fffacd;
+}
+
+.logview-status {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.logview-loading {
+    padding: 20px;
+    text-align: center;
+    color: #666;
+    font-size: 16px;
+}
+
+/* Toast notification */
+.logview-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 24px;
+    background-color: #333;
+    color: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1000;
+    opacity: 1;
+    transition: opacity 0.5s;
+}
+
+.logview-toast-fadeout {
+    opacity: 0;
+}
+
+/* Modal */
+.logview-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    z-index: 1001;
+    justify-content: center;
+    align-items: center;
+}
+
+.logview-modal-content {
+    background-color: white;
+    padding: 24px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.logview-modal-title {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.logview-modal-message {
+    margin-bottom: 20px;
+    color: #34495e;
+}
+
+.logview-modal-close {
+    padding: 8px 16px;
+    background-color: #4a6fa5;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    float: right;
+}
+
+.logview-modal-close:hover {
+    background-color: #3a5a80;
+}
+
+.logview-goto-input {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100px;
+    margin: 0 4px;
+}
+
+.logview-goto-btn {
+    padding: 8px 12px;
+    margin: 0 4px;
+    background-color: #5cb85c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.logview-goto-btn:hover {
+    background-color: #4cae4c;
+}
+
+.logview-line-current {
+    background-color: #e6f7ff !important;
+    box-shadow: inset 3px 0 0 #1890ff;
+}
+
+.logview-search-match {
+    background-color: #ff0;
+    color: #000;
+    font-weight: bold;
+    padding: 0 1px;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px #ff9900;
+}
+
+#logview-whole-word {
+    margin-right: 5px;
+}
+
+
 /* =========================== Search Tools Section - END =========================== */ 
 
 /* =========================== UNUSED - START =========================== */
