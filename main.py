@@ -14,18 +14,19 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 import uvicorn, shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading, psutil, signal, traceback, zipfile, tarfile, gzip
+# from watchdog.observers import Observer
+# from watchdog.events import FileSystemEventHandler
 
 
 # Initialize logging - Optimizing FastAPI Log Processing Application
 # logging.basicConfig(level=logging.INFO)
 # logger = logging.getLogger(__name__)
 
+# Initialize logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
@@ -52,9 +53,14 @@ app.mount("/js", StaticFiles(directory="js"), name="js")
 
 templates = Jinja2Templates(directory="templates")
 
+# LOG_DIR = "./logs"
+# RQRS_CACHE = {}
+# LOG_CACHE_META = {}
+
+# Configuration
 LOG_DIR = "./logs"
-RQRS_CACHE = {}
-LOG_CACHE_META = {}
+MAX_CACHE_SIZE = 10
+PRELOAD_ENABLED = True  # Set to False to disable startup preloading
 
 SCP_PROGRESS = {"percent": 0, "eta": 0}
 SCP_PROC = None
@@ -81,7 +87,7 @@ class SearchRequest(BaseModel):
     target_file: Optional[str] = None
 
 # Log directory
-LOG_DIR = './logs/'
+# LOG_DIR = './logs/'
 
 # Regex patterns
 TIMESTAMP_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d{3}')
@@ -120,10 +126,24 @@ def is_compressed_file(filename):
     """Check if file is compressed by extension."""
     return filename.endswith(('.zip', '.tar', '.tar.gz', '.gz', '.7z', '.Z'))
 
-def extract_thread_id(line):
-    """Extract thread ID from line."""
-    match = THREAD_ID_PATTERN.search(line)
-    return match.group(1) if match else 'N/A'
+def extract_thread_id(source_line: str) -> str:
+    """Helper function for thread ID extraction with logging"""
+    try:
+        thread_match = (RX_THREAD.search(source_line) or 
+                      RX_ALT_THREAD.search(source_line))
+        if thread_match:
+            return thread_match.group(1)
+        
+        bracketed = RX_BRACKETED.findall(source_line)
+        fallback = next((x for x in bracketed if RX_THREAD_FALLBACK.match(x)), "UNKNOWN")
+        
+        if fallback == "UNKNOWN":
+            logger.debug(f"⚠️ Couldn't extract thread ID from: {source_line[:200]}")
+        
+        return fallback
+    except Exception as e:
+        logger.warning(f"Thread ID extraction failed: {str(e)}")
+        return "UNKNOWN"
 
 def extract_service(line):
     """Extract service name from line (simple demo logic)."""
@@ -305,13 +325,19 @@ def smart_preload_rqrs():
 
 @app.on_event("startup")
 async def startup_event():
-    smart_preload_rqrs()
-    """Log startup configuration - DOES NOT load any files"""
-    logger.info("FastAPI server starting up...")
-    logger.info("Configuration:")
-    logger.info("  - Log directory: %s", os.path.abspath(LOG_DIR))
-    logger.info("  - Will exclude these file extensions: %s", EXCLUDED_EXTENSIONS)
-    logger.info("Note: No log files are loaded at startup. Files are only loaded when explicitly requested via API.")
+    # Start the server immediately
+    logger.info("FastAPI server starting...")
+    logger.info(f"Log directory: {os.path.abspath(LOG_DIR)}")
+    
+    # Start preload in background
+    if PRELOAD_ENABLED:
+        asyncio.create_task(async_preload_logs())
+    else:
+        logger.info("Skipping preload (PRELOAD_ENABLED=False)")
+
+    """Start the monitoring task"""
+    asyncio.create_task(async_preload_logs())
+    logger.info("Server started with file monitoring")
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui(request: Request):
@@ -645,6 +671,16 @@ async def analyze_logs(request: Request):
 # Improved processing the get_rqrs endpoint
 # when capturing RQ/RS XMLs - START
 ################################################
+# class LogHandler(FileSystemEventHandler):
+#     def on_modified(self, event):
+#         if not event.is_directory:
+#             asyncio.create_task(check_for_changes())
+
+# def start_file_watcher():
+#     observer = Observer()
+#     observer.schedule(LogHandler(), path=LOG_DIR)
+#     observer.start()
+
 # Pre-compiled regex patterns (optimized)
 RX_RQRS = re.compile(r'<([a-zA-Z_][\w]*?(RQ|RS))[\s>]')
 RX_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}')
@@ -654,12 +690,13 @@ RX_BRACKETED = re.compile(r'\[([^\[\]]+)\]')
 RX_THREAD_FALLBACK = re.compile(r'\d{13}_\d{4,}')
 RX_ERRORS = re.compile(r'<(ns1:)?Errors>|<.*Error.*>|ErrorCode|WarningCode', re.IGNORECASE)
 
+
 # Constants
 # LOG_DIR = "./logs"  # Configure your log directory - already declared on top
-MAX_WORKERS = 2  # Reduced thread pool size (better for memory)
-PROGRESS_INTERVAL = 10000  # Increased interval for less frequent updates
-BATCH_SIZE = 500  # Smaller batch size for better memory control
-MAX_CACHE_SIZE = 10  # Limit cache to 10 most recent files
+# MAX_WORKERS = 2  # Reduced thread pool size (better for memory)
+# PROGRESS_INTERVAL = 10000  # Increased interval for less frequent updates
+# BATCH_SIZE = 500  # Smaller batch size for better memory control
+# MAX_CACHE_SIZE = 10  # Limit cache to 10 most recent files
 
 ################################################
 # Manual Async LRU Cache Implementation - START
@@ -674,7 +711,6 @@ class AsyncLRUCache:
     async def get(self, key: str) -> Optional[Any]:
         async with self.lock:
             if key in self.cache:
-                # Move to end to mark as recently used
                 self.order.remove(key)
                 self.order.append(key)
                 return self.cache[key]
@@ -683,24 +719,108 @@ class AsyncLRUCache:
     async def set(self, key: str, value: Any) -> None:
         async with self.lock:
             if key in self.cache:
-                # Update existing and move to end
                 self.cache[key] = value
                 self.order.remove(key)
                 self.order.append(key)
             elif len(self.cache) >= self.maxsize:
-                # Evict oldest if cache is full
                 oldest = self.order.pop(0)
                 logger.info(f"[🗑️] Evicting oldest cache entry: {oldest}")
                 del self.cache[oldest]
                 self.cache[key] = value
                 self.order.append(key)
             else:
-                # Add new entry (cache not full)
                 self.cache[key] = value
                 self.order.append(key)
 
+    async def invalidate(self, key: str):
+        async with self.lock:
+            if key in self.cache:
+                del self.cache[key]
+                self.order.remove(key)
+
 # Global cache instance
 LOG_CACHE = AsyncLRUCache(maxsize=MAX_CACHE_SIZE)
+
+async def async_preload_logs():
+    """
+    Complete file monitoring solution without watchdog
+    - Handles initial preload
+    - Monitors for changes
+    - Processes changed files
+    """
+    try:
+        logger.info("[🔍] Starting file monitoring...")
+        
+        # First-time full preload
+        await initial_preload()
+        
+        # Continuous monitoring
+        while True:
+            await monitor_for_changes()
+            await asyncio.sleep(30)  # Check every 30 seconds
+            
+    except Exception as e:
+        logger.error(f"File monitoring failed: {str(e)}")
+
+async def initial_preload():
+    """Initial loading of all files"""
+    files = [f for f in os.listdir(LOG_DIR) if os.path.isfile(os.path.join(LOG_DIR, f))]
+    logger.info(f"[📦] Preloading {len(files)} files...")
+    await process_files(files)
+
+async def monitor_for_changes():
+    """Check for and process changed files"""
+    changed_files = []
+    
+    for file in os.listdir(LOG_DIR):
+        filepath = os.path.join(LOG_DIR, file)
+        if not os.path.isfile(filepath):
+            continue
+            
+        current_mtime = os.path.getmtime(filepath)
+        cached_data = await LOG_CACHE.get(file)
+        
+        # File is new or modified
+        if not cached_data or cached_data['metadata']['mtime'] != current_mtime:
+            changed_files.append(file)
+    
+    if changed_files:
+        logger.info(f"[🔄] Found {len(changed_files)} changed files")
+        await process_files(changed_files)
+
+async def process_files(files: list):
+    """Process a list of files and update cache"""
+    for file in files:
+        filepath = os.path.join(LOG_DIR, file)
+        
+        try:
+            mtime = os.path.getmtime(filepath)
+            entries = []
+            
+            async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                async for line in f:
+                    if stripped := line.strip():
+                        if "<" in stripped and (match := RX_RQRS.search(stripped)):
+                            entries.append({
+                                "tag": match.group(1),
+                                "raw": stripped[:512],
+                                # Add other fields as needed
+                            })
+            
+            await LOG_CACHE.set(file, {
+                "metadata": {
+                    "mtime": mtime,
+                    "size": os.path.getsize(filepath),
+                    "entries": len(entries)
+                },
+                "rqrs": entries
+            })
+            logger.info(f"[✅] Processed {file} ({len(entries)} entries)")
+            
+        except Exception as e:
+            logger.error(f"⚠️ Failed to process {file}: {str(e)}")
+
+
 ################################################
 # Manual Async LRU Cache Implementation - END
 ################################################
@@ -714,20 +834,16 @@ def memory_safe(min_mb=100) -> bool:
     return psutil.virtual_memory().available > min_mb * 1024 * 1024
 
 def process_line(line_number: int, current: str, previous: str):
-    """
-    Optimized line processor with early returns
-    Returns None if line doesn't contain RQ/RS
-    """
+    """Process individual log line"""
     if not (match := RX_RQRS.search(current)):
         return None
         
     is_inline_xml = bool(RX_DATE.match(current))
     source_line = current if is_inline_xml else previous
     
-    # Thread ID extraction with fallbacks
+    # Thread ID extraction
     thread_match = (RX_THREAD.search(source_line) or 
                    RX_ALT_THREAD.search(source_line))
-    
     thread_id = thread_match.group(1) if thread_match else None
     if not thread_id:
         bracketed = RX_BRACKETED.findall(source_line)
@@ -737,198 +853,108 @@ def process_line(line_number: int, current: str, previous: str):
         "line": line_number,
         "thread": thread_id,
         "tag": match.group(1),
-        "raw": current[:512],  # Further reduced truncation
+        "raw": current[:512],
         "has_issue": bool(RX_ERRORS.search(current))
     }
 
-# async def parse_log_file(log: str):
-
-#     logger.info(f"🔍 Starting parse_log_file for: {log}")  # Debug
-#     cached_result = await LOG_CACHE.get(log)
-#     logger.info(f"🔍 LOG_CACHE check result: {cached_result is not None}")  # Debug
-#     if cached_result is not None:
-#         logger.info(f"[♻️] LRU Cache HIT for {log}")
-#         return cached_result
-
-#     logger.info(f"🔍 RQRS_CACHE contents: {list(RQRS_CACHE.keys())}")  # Debug
-#     if log in RQRS_CACHE:
-#         logger.info(f"[🔥] Preload Cache HIT for {log}")
-#         await LOG_CACHE.set(log, RQRS_CACHE[log])
-#         return RQRS_CACHE[log]
-#         print(f"Preloaded files: {list(RQRS_CACHE.keys())}")
-
-#     logger.info(f"🔍 Proceeding to file parsing...")  # Debug
-
-#     """Optimized log parser with dual-cache support (preload + LRU)"""
-#     # 1. First check AsyncLRUCache (LOG_CACHE)
-#     cached_result = await LOG_CACHE.get(log)
-#     if cached_result is not None:
-#         logger.info(f"[♻️] LRU Cache HIT for {log}")
-#         return cached_result
-
-#     # 2. Check preloaded RQRS_CACHE (if available)
-#     if log in RQRS_CACHE:
-#         logger.info(f"[🔥] Preload Cache HIT for {log}")
-#         await LOG_CACHE.set(log, RQRS_CACHE[log])  # Store in LRU cache
-#         return RQRS_CACHE[log]
-
-#     # 3. Only parse if not in either cache
-#     logger.info(f"[🔄] Cache MISS for {log}, processing...")
-#     start_time = time.time()
-#     last_progress_log = start_time
-#     last_match_time = start_time
+async def async_preload_logs():
+    """Preload logs at startup using AsyncLRUCache with detailed logging"""
+    logger.info("[⚡] Starting async preload of log files...")
+    process = psutil.Process(os.getpid())
+    start_mem = process.memory_info().rss / (1024 * 1024)
+    logger.info(f"📊 Initial memory usage: {start_mem:.2f} MB")
     
-#     if not memory_safe():
-#         raise HTTPException(503, detail="Server memory constrained")
+    processed_files = 0
+    skipped_files = 0
+    failed_files = 0
+    total_entries = 0
 
-#     filepath = os.path.join(LOG_DIR, log)
-#     entries = []
-#     previous_line = ""
-
-#     # --- Line Counting Phase ---
-#     try:
-#         total_lines = 0
-#         async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
-#             async for _ in f:
-#                 total_lines += 1
-#     except FileNotFoundError:
-#         raise HTTPException(404, detail=f"Log file not found: {log}")
-
-#     # --- Processing Phase ---
-#     try:
-#         line_count = 0
-#         async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
-#             async for line in f:
-#                 line_count += 1
-#                 if line_count == 1:  # Skip header
-#                     continue
+    for file in os.listdir(LOG_DIR):
+        filepath = os.path.join(LOG_DIR, file)
+        
+        # File validation checks
+        if not os.path.isfile(filepath):
+            logger.warning(f"⚠️ Skipping non-file: {file}")
+            skipped_files += 1
+            continue
+            
+        file_size = os.path.getsize(filepath) / (1024 * 1024)  # in MB
+        logger.info(f"\n📂 Processing file: {file} ({file_size:.2f} MB)")
+        
+        # Check cache first
+        if await LOG_CACHE.get(file) is not None:
+            logger.info(f"⏩ Already in cache, skipping: {file}")
+            skipped_files += 1
+            continue
+            
+        try:
+            entries = []
+            line_count = 0
+            entry_count = 0
+            start_time = time.time()
+            
+            async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                previous_line = ""
+                
+                async for line in f:
+                    line_count += 1
+                    stripped = line.strip()
                     
-#                 stripped = line.strip()
-#                 if "<" in stripped:  # Fast XML tag check
-#                     result = process_line(line_count, stripped, previous_line)
-#                     if result:
-#                         entries.append(result)
-#                         last_match_time = time.time()
-#                         logger.debug(f"[⚡] Found {result['tag']} at line {line_count}")
-                
-#                 previous_line = stripped
-                
-#                 # Fixed progress condition (added missing parenthesis)
-#                 if (time.time() - last_progress_log > 1.0) or (line_count % max(1, total_lines//100) == 0):
-#                     elapsed = time.time() - start_time
-#                     remaining = (elapsed / line_count) * (total_lines - line_count)
-#                     logger.info(
-#                         f"[📈] {log}: {line_count:,}/{total_lines:,} lines "
-#                         f"({(line_count/total_lines)*100:.1f}%) | "
-#                         f"ETA: {format_time(remaining)}"
-#                     )
-#                     last_progress_log = time.time()
-                
-#                 if line_count % 100 == 0:
-#                     await asyncio.sleep(0)
-
-#     except Exception as e:
-#         logger.error(f"Error processing {log}: {str(e)}", exc_info=True)
-#         raise HTTPException(500, detail="Internal server error")
-
-#     # --- Result Packaging ---
-#     elapsed_time = time.time() - start_time
-#     result = {
-#         "metadata": {
-#             "lines_processed": line_count,
-#             "total_lines": total_lines,
-#             "entries_found": len(entries),
-#             "elapsed_seconds": round(elapsed_time, 2),
-#             "processing_rate": round(line_count / elapsed_time, 1) if elapsed_time > 0 else 0,
-#             "last_match_at": round(last_match_time - start_time, 2)
-#         },
-#         "rqrs": entries
-#     }
-    
-#     await LOG_CACHE.set(log, result)
-#     return result
-
-async def parse_log_file(log: str):
-    """Optimized main log parsing function with enhanced progress tracking"""
-    # Cache check remains first (unchanged)
-    cached_result = await LOG_CACHE.get(log)
-    if cached_result is not None:
-        logger.info(f"[♻️] Cache HIT for {log}")
-        return cached_result
-    
-    logger.info(f"[🔄] Cache MISS for {log}, processing...")
-    start_time = time.time()
-    last_progress_log = start_time
-    last_match_time = start_time
-    
-    if not memory_safe():
-        raise HTTPException(503, detail="Server memory constrained")
-
-    filepath = os.path.join(LOG_DIR, log)
-    entries = []
-    previous_line = ""
-    line_count = 0
-    total_lines = 0  # We'll count this first for accurate progress
-
-    # First pass: count total lines (for accurate progress %)
-    try:
-        async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
-            async for _ in f:
-                total_lines += 1
-    except FileNotFoundError:
-        raise HTTPException(404, detail=f"Log file not found: {log}")
-
-    # Second pass: actual processing
-    try:
-        async with aiofiles.open(filepath, mode='r', encoding='utf-8', errors='ignore') as f:
-            async for line in f:
-                line_count += 1
-                if line_count == 1:  # Skip header
-                    continue
+                    if line_count % 10000 == 0:
+                        logger.debug(f"📜 Processing line {line_count:,}...")
                     
-                stripped = line.strip()
-                
-                # Process line
-                if "<" in stripped:  # Quick pre-check
-                    line_start_time = time.time()
-                    result = process_line(line_count, stripped, previous_line)
-                    
-                    if result:
-                        match_time = time.time() - line_start_time
-                        entries.append(result)
+                    if "<" in stripped and (match := RX_RQRS.search(stripped)):
+                        # Detailed XML match logging
+                        logger.debug(f"🔍 Found XML at line {line_count}: {stripped[:100]}...")
                         
-                        # Enhanced match logging
-                        logger.info(
-                            f"[⚡] Found {result['tag']} at line {line_count} "
-                            f"(Thread: {result['thread']}) "
-                            f"in {match_time*1000:.1f}ms"
-                        )
-                        last_match_time = time.time()
-                
-                previous_line = stripped
-                
-                # Progress tracking (every 1% or 1 second, whichever comes first)
-                progress_percent = (line_count / total_lines) * 100
-                if (time.time() - last_progress_log > 1.0) or (line_count % max(1, total_lines//100) == 0):
-                    elapsed = time.time() - start_time
-                    remaining_estimate = (elapsed / line_count) * (total_lines - line_count)
+                        # Thread ID extraction
+                        is_inline_xml = bool(RX_DATE.match(stripped))
+                        source_line = stripped if is_inline_xml else previous_line
+                        thread_id = extract_thread_id(source_line)
+                        
+                        entries.append({
+                            "line": line_count,
+                            "tag": match.group(1),
+                            "thread": thread_id,
+                            "raw": stripped[:512],
+                            "has_issue": bool(RX_ERRORS.search(stripped))
+                        })
+                        entry_count += 1
                     
-                    logger.info(
-                        f"[📈] Progress: {progress_percent:.1f}% | "
-                        f"Lines: {line_count:,}/{total_lines:,} | "
-                        f"Matches: {len(entries):,} | "
-                        f"Elapsed: {format_time(elapsed)} | "
-                        f"ETA: {format_time(remaining_estimate)}"
-                    )
-                    last_progress_log = time.time()
-                
-                # Cooperative multitasking point
-                if line_count % 100 == 0:
-                    await asyncio.sleep(0)
+                    previous_line = stripped
+            
+            processing_time = time.time() - start_time
+            total_entries += entry_count
+            
+            await LOG_CACHE.set(file, {
+                "metadata": {
+                    "preloaded": True,
+                    "lines_processed": line_count,
+                    "entries_found": entry_count,
+                    "processing_time": round(processing_time, 2)
+                },
+                "rqrs": entries
+            })
+            
+            logger.info(f"✅ Successfully processed {file}")
+            logger.info(f"   Lines: {line_count:,} | Entries: {entry_count:,} | Time: {processing_time:.2f}s")
+            processed_files += 1
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to process {file}: {str(e)}", exc_info=True)
+            failed_files += 1
+            continue
+    
+    # Final summary
+    end_mem = process.memory_info().rss / (1024 * 1024)
+    logger.info("\n📊 Preload Summary:")
+    logger.info(f"  Processed files: {processed_files}")
+    logger.info(f"  Skipped files: {skipped_files} (already cached or invalid)")
+    logger.info(f"  Failed files: {failed_files}")
+    logger.info(f"  Total RQ/RS entries found: {total_entries:,}")
+    logger.info(f"  Memory usage: {start_mem:.2f} MB → {end_mem:.2f} MB")
+    logger.info(f"  Cache size: {len(LOG_CACHE.cache)}/{MAX_CACHE_SIZE} files")
 
-    except Exception as e:
-        logger.error(f"Error processing {log}: {str(e)}", exc_info=True)
-        raise HTTPException(500, detail="Internal server error")
 
     # Final statistics
     elapsed_time = time.time() - start_time
@@ -958,13 +984,69 @@ async def parse_log_file(log: str):
     
 @app.get("/get_rqrs")
 async def get_rqrs(log: str):
-    print(f"Preloaded files: {list(RQRS_CACHE.keys())}")
-    filepath = os.path.join(LOG_DIR, log)
-    logger.info(f"🔍 Looking for file at: {filepath}")
-    logger.info(f"🔍 File exists: {os.path.exists(filepath)}")
     """Endpoint that uses the optimized parser"""
     return await parse_log_file(log)
+
+
+async def parse_log_file(log: str):
+    """Unified parsing using AsyncLRUCache"""
+    # 1. Try cache first
+    if (cached := await LOG_CACHE.get(log)) is not None:
+        logger.info(f"[♻️] Cache HIT for {log}")
+        return cached
     
+    # 2. Parse and cache
+    logger.info(f"[🔄] Cache MISS for {log}, processing...")
+    filepath = os.path.join(LOG_DIR, log)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(404, detail="File not found")
+    
+    start_time = time.time()
+    entries = []
+    line_count = 0
+    
+    try:
+        # First pass: count lines
+        total_lines = 0
+        async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            async for _ in f:
+                total_lines += 1
+        
+        # Second pass: process
+        async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            async for line in f:
+                line_count += 1
+                if line_count == 1:  # Skip header
+                    continue
+                    
+                stripped = line.strip()
+                if "<" in stripped:
+                    result = process_line(line_count, stripped, previous_line)
+                    if result:
+                        entries.append(result)
+                previous_line = stripped
+                
+                # Progress reporting
+                if line_count % 1000 == 0:
+                    await asyncio.sleep(0)
+                    
+    except Exception as e:
+        logger.error(f"Error processing {log}: {str(e)}")
+        raise HTTPException(500, detail="Internal server error")
+    
+    result = {
+        "metadata": {
+            "lines_processed": line_count,
+            "entries_found": len(entries),
+            "processing_time": round(time.time() - start_time, 2)
+        },
+        "rqrs": entries
+    }
+    
+    await LOG_CACHE.set(log, result)
+    return result
+
 ### Debugging cached parsed XMLs
 @app.get("/debug_rqrs_cache")
 async def debug_rqrs_cache():
@@ -984,7 +1066,7 @@ async def debug_cache():
 # To get the cached parsed XML's status - http://127.0.0.1:8001/cache_status 
 @app.get("/cache_status")
 async def cache_status():
-    logger.info(f"[✅] Checking cached parsed RQ/RS XMLs...")
+    """Check cache status"""
     return {
         "cached_logs": list(LOG_CACHE.cache.keys()),
         "cache_size": f"{len(LOG_CACHE.cache)}/{MAX_CACHE_SIZE}",
@@ -994,10 +1076,36 @@ async def cache_status():
 # To flush the cached parsed XML's - http://127.0.0.1:8001/clear_cache
 @app.post("/clear_cache")
 async def clear_cache():
-    logger.info(f"[✅] Flushing cached parsed RQ/RS XMLs...")
+    """Clear the cache"""
     LOG_CACHE.cache.clear()
     LOG_CACHE.order.clear()
     return {"status": "Cache cleared"}
+
+# To refresh the cached parsed XML's - http://127.0.0.1:8001/refresh_cache
+@app.post("/refresh_cache")
+async def refresh_cache():
+    """Manually trigger a full cache refresh"""
+    files = [f for f in os.listdir(LOG_DIR) if os.path.isfile(os.path.join(LOG_DIR, f))]
+    await process_files(files)
+    return {"status": "Cache refreshed", "files_processed": len(files)}
+
+# # Check what files are cached and when they were last updated
+# # http://127.0.0.1:8001/cache_info
+# @app.get("/cache_info")
+# async def cache_info():
+#     return {
+#         "cached_files": [
+#             {
+#                 "name": k,
+#                 "last_modified": v["metadata"]["mtime"],
+#                 "entries": v["metadata"]["entries"]
+#             }
+#             for k, v in LOG_CACHE.cache.items()
+#         ]
+#     }
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", port=8001, reload=True)
 ################################################
 # Improved processing the get_rqrs endpoint
 # when capturing RQ/RS XMLs - END
@@ -1064,88 +1172,88 @@ async def get_log_context(log: str, line: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
   
-@app.get("/get_rqrs_content")
-def get_rqrs_content(log: str, index: int, tag: str):
-    import os
-    from xml.dom import minidom
-    from fastapi.responses import Response
+# @app.get("/get_rqrs_content")
+# def get_rqrs_content(log: str, index: int, tag: str):
+#     import os
+#     from xml.dom import minidom
+#     from fastapi.responses import Response
 
-    log_path = os.path.join(LOG_DIR, log)
-    if not os.path.exists(log_path):
-        return Response("Log file not found", status_code=404)
+#     log_path = os.path.join(LOG_DIR, log)
+#     if not os.path.exists(log_path):
+#         return Response("Log file not found", status_code=404)
 
-    with open(log_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+#     with open(log_path, "r", encoding="utf-8") as f:
+#         lines = f.readlines()
 
-    if index < 0 or index >= len(lines):
-        return Response("Invalid index", status_code=400)
+#     if index < 0 or index >= len(lines):
+#         return Response("Invalid index", status_code=400)
 
-    open_tag = f"<{tag}"
-    close_tag = f"</{tag}>"
-    captured = []
-    inside_xml = False
-    found_open = False
+#     open_tag = f"<{tag}"
+#     close_tag = f"</{tag}>"
+#     captured = []
+#     inside_xml = False
+#     found_open = False
 
-    for i in range(index, len(lines)):
-        line = lines[i].strip()
+#     for i in range(index, len(lines)):
+#         line = lines[i].strip()
 
-        # Case 1: Inline XML
-        if not inside_xml and open_tag in line:
-            start = line.find(open_tag)
-            captured.append(line[start:])
-            inside_xml = True
-            found_open = True
+#         # Case 1: Inline XML
+#         if not inside_xml and open_tag in line:
+#             start = line.find(open_tag)
+#             captured.append(line[start:])
+#             inside_xml = True
+#             found_open = True
 
-        # Case 2: Line mentions XML and the next line contains the XML (next-line XML)
-        elif not inside_xml and ("XML Request" in line or "XML Object is" in line):
-            # Look ahead for the actual XML opening tag
-            if i + 1 < len(lines):
-                next_line = lines[i + 1].strip()
-                if open_tag in next_line:
-                    captured.append(next_line)
-                    inside_xml = True
-                    found_open = True
-                    i += 1  # skip next line (already used)
-                    continue  # go to next iteration
+#         # Case 2: Line mentions XML and the next line contains the XML (next-line XML)
+#         elif not inside_xml and ("XML Request" in line or "XML Object is" in line):
+#             # Look ahead for the actual XML opening tag
+#             if i + 1 < len(lines):
+#                 next_line = lines[i + 1].strip()
+#                 if open_tag in next_line:
+#                     captured.append(next_line)
+#                     inside_xml = True
+#                     found_open = True
+#                     i += 1  # skip next line (already used)
+#                     continue  # go to next iteration
 
-        # Case 3: Continuing XML capture
-        elif inside_xml:
-            captured.append(line)
-            if close_tag in line:
-                break
+#         # Case 3: Continuing XML capture
+#         elif inside_xml:
+#             captured.append(line)
+#             if close_tag in line:
+#                 break
 
-    if not found_open:
-        return Response("No recognizable XML starting point.", status_code=400)
+#     if not found_open:
+#         return Response("No recognizable XML starting point.", status_code=400)
 
-    snippet = '\n'.join(captured).strip()
+#     snippet = '\n'.join(captured).strip()
 
-    print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
-    print(snippet)
-    print("===== [END XML FRAGMENT] =====\n")
+#     print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
+#     print(snippet)
+#     print("===== [END XML FRAGMENT] =====\n")
 
-    snippet = '\n'.join(captured).strip()
+#     snippet = '\n'.join(captured).strip()
 
-    # ✅ Trim to only the first closing tag, to prevent duplicate XML roots
-    closing_tag = f"</{tag}>"
-    closing_index = snippet.find(closing_tag)
-    if closing_index != -1:
-        snippet = snippet[:closing_index + len(closing_tag)]
+#     # ✅ Trim to only the first closing tag, to prevent duplicate XML roots
+#     closing_tag = f"</{tag}>"
+#     closing_index = snippet.find(closing_tag)
+#     if closing_index != -1:
+#         snippet = snippet[:closing_index + len(closing_tag)]
 
-    print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
-    print(snippet)
-    print("===== [END XML FRAGMENT] =====\n")
+#     print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
+#     print(snippet)
+#     print("===== [END XML FRAGMENT] =====\n")
 
-    # ✅ Full try-except block restored
-    try:
-        parsed = minidom.parseString(snippet.encode("utf-8"))
-        pretty_xml = parsed.toprettyxml(indent="  ")
-        # Remove blank lines that minidom adds
-        pretty_xml = '\n'.join(line for line in pretty_xml.splitlines() if line.strip())
-        return Response(pretty_xml, media_type="text/plain")
+#     # ✅ Full try-except block restored
+#     try:
+#         parsed = minidom.parseString(snippet.encode("utf-8"))
+#         pretty_xml = parsed.toprettyxml(indent="  ")
+#         # Remove blank lines that minidom adds
+#         pretty_xml = '\n'.join(line for line in pretty_xml.splitlines() if line.strip())
+#         return Response(pretty_xml, media_type="text/plain")
 
-    except Exception as e:
-        print(f"[❌ XML Pretty-Print Error] {e}")
-        return Response(snippet, media_type="text/plain")
+#     except Exception as e:
+#         print(f"[❌ XML Pretty-Print Error] {e}")
+#         return Response(snippet, media_type="text/plain")
 
 # --- Backend Search API Implementation endpoints START --- 
 # --- FastAPI endpoint ---
@@ -1579,6 +1687,20 @@ def format_file_size(bytes):
 ##### View raw logs endpoints END ######  
 
 #### Memory and resources monitoring
+
+### Monitor performance
+### http://127.0.0.1:8001/performance
+# startup_time = datetime.now()
+
+# @app.get("/performance")
+# async def performance_stats():
+#     return {
+#         "uptime": (datetime.now() - startup_time).total_seconds(),
+#         "cache_hit_rate": cache_hits / (cache_hits + cache_misses),  # Track these counters
+#         "preload_complete": not any("preload" in str(t) for t in asyncio.all_tasks()),
+#         "memory_usage": psutil.Process().memory_info().rss / (1024 * 1024)
+#     }
+
 #### http://127.0.0.1:8001/monitor
 def get_process_info(pid):
     """Get detailed information about a specific process"""
