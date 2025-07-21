@@ -1,4 +1,5 @@
 
+# Import modules
 from fastapi import FastAPI, Request, Query, HTTPException, Response, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,15 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 import uvicorn, shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading, psutil, signal, traceback, zipfile, tarfile, gzip
-# from watchdog.observers import Observer
-# from watchdog.events import FileSystemEventHandler
 
 
 # Initialize logging - Optimizing FastAPI Log Processing Application
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger(__name__)
-
-# Initialize logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -53,14 +48,10 @@ app.mount("/js", StaticFiles(directory="js"), name="js")
 
 templates = Jinja2Templates(directory="templates")
 
-# LOG_DIR = "./logs"
-# RQRS_CACHE = {}
-# LOG_CACHE_META = {}
-
 # Configuration
 LOG_DIR = "./logs"
 MAX_CACHE_SIZE = 10
-PRELOAD_ENABLED = True  # Set to False to disable startup preloading
+PRELOAD_ENABLED = False  # Set to False to disable startup preloading
 
 SCP_PROGRESS = {"percent": 0, "eta": 0}
 SCP_PROC = None
@@ -329,15 +320,12 @@ async def startup_event():
     logger.info("FastAPI server starting...")
     logger.info(f"Log directory: {os.path.abspath(LOG_DIR)}")
     
-    # Start preload in background
+    # Start preload in background only if enabled
     if PRELOAD_ENABLED:
         asyncio.create_task(async_preload_logs())
+        logger.info("Server started with file monitoring")
     else:
         logger.info("Skipping preload (PRELOAD_ENABLED=False)")
-
-    """Start the monitoring task"""
-    asyncio.create_task(async_preload_logs())
-    logger.info("Server started with file monitoring")
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui(request: Request):
@@ -671,15 +659,6 @@ async def analyze_logs(request: Request):
 # Improved processing the get_rqrs endpoint
 # when capturing RQ/RS XMLs - START
 ################################################
-# class LogHandler(FileSystemEventHandler):
-#     def on_modified(self, event):
-#         if not event.is_directory:
-#             asyncio.create_task(check_for_changes())
-
-# def start_file_watcher():
-#     observer = Observer()
-#     observer.schedule(LogHandler(), path=LOG_DIR)
-#     observer.start()
 
 # Pre-compiled regex patterns (optimized)
 RX_RQRS = re.compile(r'<([a-zA-Z_][\w]*?(RQ|RS))[\s>]')
@@ -690,13 +669,6 @@ RX_BRACKETED = re.compile(r'\[([^\[\]]+)\]')
 RX_THREAD_FALLBACK = re.compile(r'\d{13}_\d{4,}')
 RX_ERRORS = re.compile(r'<(ns1:)?Errors>|<.*Error.*>|ErrorCode|WarningCode', re.IGNORECASE)
 
-
-# Constants
-# LOG_DIR = "./logs"  # Configure your log directory - already declared on top
-# MAX_WORKERS = 2  # Reduced thread pool size (better for memory)
-# PROGRESS_INTERVAL = 10000  # Increased interval for less frequent updates
-# BATCH_SIZE = 500  # Smaller batch size for better memory control
-# MAX_CACHE_SIZE = 10  # Limit cache to 10 most recent files
 
 ################################################
 # Manual Async LRU Cache Implementation - START
@@ -1088,21 +1060,6 @@ async def refresh_cache():
     files = [f for f in os.listdir(LOG_DIR) if os.path.isfile(os.path.join(LOG_DIR, f))]
     await process_files(files)
     return {"status": "Cache refreshed", "files_processed": len(files)}
-
-# # Check what files are cached and when they were last updated
-# # http://127.0.0.1:8001/cache_info
-# @app.get("/cache_info")
-# async def cache_info():
-#     return {
-#         "cached_files": [
-#             {
-#                 "name": k,
-#                 "last_modified": v["metadata"]["mtime"],
-#                 "entries": v["metadata"]["entries"]
-#             }
-#             for k, v in LOG_CACHE.cache.items()
-#         ]
-#     }
 
 if __name__ == "__main__":
     uvicorn.run("main:app", port=8001, reload=True)
@@ -1578,128 +1535,6 @@ def format_file_size(bytes):
     if bytes < 1024 * 1024 * 1024:
         return f"{bytes / (1024 * 1024):.1f} MB"
     return f"{bytes / (1024 * 1024 * 1024):.1f} GB"
-
-## DEAD CODES ##
-# @app.get("/api/logs/preview")
-# async def preview_log_file(filename: str, lines: int = 1000):
-#     """Preview first N lines of a log file with detailed logging"""
-#     """ACTUAL FILE LOAD - Only called when user clicks Load File"""
-#     try:
-#         logger.info("USER INITIATED FILE LOAD: %s (first %d lines)", filename, lines)
-#         start_time = datetime.now()
-        
-#         file_path = Path(LOG_DIR) / filename
-#         if not file_path.is_file():
-#             logger.warning("File not found: %s", filename)
-#             raise HTTPException(status_code=404, detail="File not found")
-        
-#         if is_compressed_file(filename):
-#             logger.warning("Attempted to preview compressed file: %s", filename)
-#             raise HTTPException(status_code=400, detail="Compressed files are not supported")
-        
-#         # Read only the first N lines efficiently
-#         lines_read = []
-#         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-#             for _ in range(lines):
-#                 line = f.readline()
-#                 if not line:
-#                     break
-#                 lines_read.append(line)
-        
-#         # Count total lines (for reporting)
-#         total_lines = 0
-#         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-#             total_lines = sum(1 for _ in f)
-        
-#         duration = (datetime.now() - start_time).total_seconds()
-#         logger.info(
-#             "Preview completed for %s. Lines returned: %d/%d. Time taken: %.2fs",
-#             filename, len(lines_read), total_lines, duration
-#         )
-        
-#         return JSONResponse(content={
-#             "filename": filename,
-#             "lines": lines_read,
-#             "total_lines": total_lines,
-#             "processing_metrics": {
-#                 "time_taken_seconds": duration,
-#                 "file_size_bytes": file_path.stat().st_size
-#             }
-#         })
-#     except Exception as e:
-#         logger.error("Failed to preview file %s: %s", filename, str(e), exc_info=True)
-#         raise HTTPException(status_code=500, detail=str(e))
-
-# @app.get("/api/logs/search")
-# async def search_in_log(filename: str, query: str, max_results: int = 100):
-#     """Search for a string in a log file with detailed logging"""
-#     try:
-#         logger.info(
-#             "Starting search in file: %s (Query: '%s', Max results: %d)",
-#             filename, query, max_results
-#         )
-#         start_time = datetime.now()
-        
-#         file_path = Path(LOG_DIR) / filename
-#         if not file_path.is_file():
-#             logger.warning("File not found for search: %s", filename)
-#             raise HTTPException(status_code=404, detail="File not found")
-        
-#         if is_compressed_file(filename):
-#             logger.warning("Attempted to search compressed file: %s", filename)
-#             raise HTTPException(status_code=400, detail="Compressed files are not supported")
-        
-#         results = []
-#         lines_processed = 0
-#         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-#             for line_num, line in enumerate(f, 1):
-#                 lines_processed = line_num
-#                 if query.lower() in line.lower():
-#                     results.append({
-#                         "line_number": line_num,
-#                         "content": line.strip()
-#                     })
-#                     if len(results) >= max_results:
-#                         break
-        
-#         duration = (datetime.now() - start_time).total_seconds()
-#         logger.info(
-#             "Search completed in %s. Matches: %d/%d lines processed. Time taken: %.2fs",
-#             filename, len(results), lines_processed, duration
-#         )
-        
-#         return JSONResponse(content={
-#             "filename": filename,
-#             "query": query,
-#             "results": results,
-#             "total_matches": len(results),
-#             "processing_metrics": {
-#                 "lines_processed": lines_processed,
-#                 "time_taken_seconds": duration,
-#                 "file_size_bytes": file_path.stat().st_size
-#             }
-#         })
-#     except Exception as e:
-#         logger.error("Failed to search in file %s: %s", filename, str(e), exc_info=True)
-#         raise HTTPException(status_code=500, detail=str(e))
-
-
-##### View raw logs endpoints END ######  
-
-#### Memory and resources monitoring
-
-### Monitor performance
-### http://127.0.0.1:8001/performance
-# startup_time = datetime.now()
-
-# @app.get("/performance")
-# async def performance_stats():
-#     return {
-#         "uptime": (datetime.now() - startup_time).total_seconds(),
-#         "cache_hit_rate": cache_hits / (cache_hits + cache_misses),  # Track these counters
-#         "preload_complete": not any("preload" in str(t) for t in asyncio.all_tasks()),
-#         "memory_usage": psutil.Process().memory_info().rss / (1024 * 1024)
-#     }
 
 #### http://127.0.0.1:8001/monitor
 def get_process_info(pid):
