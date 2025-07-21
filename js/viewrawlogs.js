@@ -124,78 +124,33 @@ class LogViewer {
 	}
     
 	async refreshFileList() {
-		try {
-			const response = await fetch('/api/logs/list');
-			const data = await response.json();
-			
-			// Clear dropdown
-			this.fileSelect.innerHTML = '<option value="">-- Select Target File --</option>';
-			
-			// Sort files by date (newest first) then by name
-			const sortedFiles = data.files.sort((a, b) => {
-				// Try to extract dates from filenames (common log patterns)
-				const getDate = (filename) => {
-					// Match patterns like: 
-					// - server.log.2023-12-31
-					// - error_20231231.log
-					// - 2023-12-31_app.log
-					const dateMatch = filename.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})/);
-					return dateMatch ? new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`) : new Date(0);
-				};
-				
-				const dateA = getDate(a.name);
-				const dateB = getDate(b.name);
-				
-				// Sort by date descending (newest first)
-				if (dateB - dateA !== 0) return dateB - dateA;
-				
-				// If dates are equal, sort alphabetically
-				return a.name.localeCompare(b.name);
-			});
+	    try {
+	        const response = await fetch('/api/logs/list');
+	        const data = await response.json();
+	        
+	        // Clear dropdown
+	        this.fileSelect.innerHTML = '<option value="">-- Select Target File --</option>';
+	        
+	        // Sort files using numeric-aware comparison
+	        const sortedFiles = data.files.sort((a, b) => 
+	            a.name.localeCompare(b.name, undefined, { 
+	                numeric: true, 
+	                sensitivity: 'base' 
+	            })
+	        );
 
-			// Add grouped options (recent files first)
-			const today = new Date();
-			const recentCutoff = new Date();
-			recentCutoff.setDate(today.getDate() - 7); // Files from last 7 days
-			
-			let addedRecentHeader = false;
-			let addedOlderHeader = false;
+	        // Add files to dropdown with size information
+	        sortedFiles.forEach(file => {
+	            const option = document.createElement('option');
+	            option.value = file.name;
+	            option.textContent = `${file.name} - ${this.formatFileSize(file.size)}`;
+	            this.fileSelect.appendChild(option);
+	        });
 
-			sortedFiles.forEach(file => {
-				const fileDate = file.name.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})/)
-					? new Date(file.name.replace(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})/, '$1-$2-$3'))
-					: null;
-
-				// Add section header for recent files
-				if (fileDate && fileDate >= recentCutoff && !addedRecentHeader) {
-					this.addDropdownSectionHeader('── Recent Files ──');
-					addedRecentHeader = true;
-				}
-				// Add section header for older files
-				else if ((!fileDate || fileDate < recentCutoff) && !addedOlderHeader && addedRecentHeader) {
-					this.addDropdownSectionHeader('── Older Files ──');
-					addedOlderHeader = true;
-				}
-
-				// Create file option
-				const option = document.createElement('option');
-				option.value = file.name;
-				
-				// Enhanced display text
-				let displayText = file.name;
-				if (fileDate) {
-					displayText += ` (${fileDate.toLocaleDateString()})`;
-				}
-				displayText += ` - ${this.formatFileSize(file.size)}`;
-				
-				option.textContent = displayText;
-				this.fileSelect.appendChild(option);
-			});
-
-			this.showToast(`Loaded ${sortedFiles.length} log files`);
-		} catch (error) {
-			this.showModal('Error', `Failed to refresh files: ${error.message}`);
-		}
+	        this.showToast(`Loaded ${sortedFiles.length} log files`);
+	    } catch (error) {
+	        this.showModal('Error', `Failed to refresh files: ${error.message}`);
+	    }
 	}
     
 	async loadSelectedFile() {
