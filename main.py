@@ -1172,88 +1172,88 @@ async def get_log_context(log: str, line: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
   
-# @app.get("/get_rqrs_content")
-# def get_rqrs_content(log: str, index: int, tag: str):
-#     import os
-#     from xml.dom import minidom
-#     from fastapi.responses import Response
+@app.get("/get_rqrs_content")
+def get_rqrs_content(log: str, index: int, tag: str):
+    import os
+    from xml.dom import minidom
+    from fastapi.responses import Response
 
-#     log_path = os.path.join(LOG_DIR, log)
-#     if not os.path.exists(log_path):
-#         return Response("Log file not found", status_code=404)
+    log_path = os.path.join(LOG_DIR, log)
+    if not os.path.exists(log_path):
+        return Response("Log file not found", status_code=404)
 
-#     with open(log_path, "r", encoding="utf-8") as f:
-#         lines = f.readlines()
+    with open(log_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
-#     if index < 0 or index >= len(lines):
-#         return Response("Invalid index", status_code=400)
+    if index < 0 or index >= len(lines):
+        return Response("Invalid index", status_code=400)
 
-#     open_tag = f"<{tag}"
-#     close_tag = f"</{tag}>"
-#     captured = []
-#     inside_xml = False
-#     found_open = False
+    open_tag = f"<{tag}"
+    close_tag = f"</{tag}>"
+    captured = []
+    inside_xml = False
+    found_open = False
 
-#     for i in range(index, len(lines)):
-#         line = lines[i].strip()
+    for i in range(index, len(lines)):
+        line = lines[i].strip()
 
-#         # Case 1: Inline XML
-#         if not inside_xml and open_tag in line:
-#             start = line.find(open_tag)
-#             captured.append(line[start:])
-#             inside_xml = True
-#             found_open = True
+        # Case 1: Inline XML
+        if not inside_xml and open_tag in line:
+            start = line.find(open_tag)
+            captured.append(line[start:])
+            inside_xml = True
+            found_open = True
 
-#         # Case 2: Line mentions XML and the next line contains the XML (next-line XML)
-#         elif not inside_xml and ("XML Request" in line or "XML Object is" in line):
-#             # Look ahead for the actual XML opening tag
-#             if i + 1 < len(lines):
-#                 next_line = lines[i + 1].strip()
-#                 if open_tag in next_line:
-#                     captured.append(next_line)
-#                     inside_xml = True
-#                     found_open = True
-#                     i += 1  # skip next line (already used)
-#                     continue  # go to next iteration
+        # Case 2: Line mentions XML and the next line contains the XML (next-line XML)
+        elif not inside_xml and ("XML Request" in line or "XML Object is" in line):
+            # Look ahead for the actual XML opening tag
+            if i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if open_tag in next_line:
+                    captured.append(next_line)
+                    inside_xml = True
+                    found_open = True
+                    i += 1  # skip next line (already used)
+                    continue  # go to next iteration
 
-#         # Case 3: Continuing XML capture
-#         elif inside_xml:
-#             captured.append(line)
-#             if close_tag in line:
-#                 break
+        # Case 3: Continuing XML capture
+        elif inside_xml:
+            captured.append(line)
+            if close_tag in line:
+                break
 
-#     if not found_open:
-#         return Response("No recognizable XML starting point.", status_code=400)
+    if not found_open:
+        return Response("No recognizable XML starting point.", status_code=400)
 
-#     snippet = '\n'.join(captured).strip()
+    snippet = '\n'.join(captured).strip()
 
-#     print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
-#     print(snippet)
-#     print("===== [END XML FRAGMENT] =====\n")
+    print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
+    print(snippet)
+    print("===== [END XML FRAGMENT] =====\n")
 
-#     snippet = '\n'.join(captured).strip()
+    snippet = '\n'.join(captured).strip()
 
-#     # ✅ Trim to only the first closing tag, to prevent duplicate XML roots
-#     closing_tag = f"</{tag}>"
-#     closing_index = snippet.find(closing_tag)
-#     if closing_index != -1:
-#         snippet = snippet[:closing_index + len(closing_tag)]
+    # ✅ Trim to only the first closing tag, to prevent duplicate XML roots
+    closing_tag = f"</{tag}>"
+    closing_index = snippet.find(closing_tag)
+    if closing_index != -1:
+        snippet = snippet[:closing_index + len(closing_tag)]
 
-#     print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
-#     print(snippet)
-#     print("===== [END XML FRAGMENT] =====\n")
+    print("\n===== [🪵 DEBUG] Extracted XML Fragment =====")
+    print(snippet)
+    print("===== [END XML FRAGMENT] =====\n")
 
-#     # ✅ Full try-except block restored
-#     try:
-#         parsed = minidom.parseString(snippet.encode("utf-8"))
-#         pretty_xml = parsed.toprettyxml(indent="  ")
-#         # Remove blank lines that minidom adds
-#         pretty_xml = '\n'.join(line for line in pretty_xml.splitlines() if line.strip())
-#         return Response(pretty_xml, media_type="text/plain")
+    # ✅ Full try-except block restored
+    try:
+        parsed = minidom.parseString(snippet.encode("utf-8"))
+        pretty_xml = parsed.toprettyxml(indent="  ")
+        # Remove blank lines that minidom adds
+        pretty_xml = '\n'.join(line for line in pretty_xml.splitlines() if line.strip())
+        return Response(pretty_xml, media_type="text/plain")
 
-#     except Exception as e:
-#         print(f"[❌ XML Pretty-Print Error] {e}")
-#         return Response(snippet, media_type="text/plain")
+    except Exception as e:
+        print(f"[❌ XML Pretty-Print Error] {e}")
+        return Response(snippet, media_type="text/plain")
 
 # --- Backend Search API Implementation endpoints START --- 
 # --- FastAPI endpoint ---
