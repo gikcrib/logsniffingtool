@@ -2,8 +2,8 @@
 <html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>JBoss Log Analyzer</title>
-    <link rel="icon" href="/templates/favicon.ico" type="image/x-icon">
+    <title>Log Sniffing Tool</title>
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 </head>
@@ -11,10 +11,10 @@
     <div class="container">
         <div id="toast" class="toast"></div>
         <header class="app-header">
-            <div class="branding">
-                <span class="logo">📘</span>
-                <span class="title">JBoss Log Scanner</span>
-            </div>
+			<div class="branding">
+			    <img src="/static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool" class="logo">
+			    <span class="title">Log Sniffing Tool</span>
+			</div>
             <div id="topControls" class="top-controls">
                 <button id="themeToggleBtn" title="Toggle Theme">🌗</button>
                 <button id="refreshPageBtn" title="Refresh Page">🔄</button>
@@ -24,27 +24,21 @@
         <!-- Tab Navigation -->
         <div class="tab-container">
             <div class="tab-header">
-                <button class="tab-button active" data-tab="logsmanage-tab">Manage Logs</button>
-                <button class="tab-button" data-tab="error-tab">Error Summary</button>
+                <button class="tab-button active" data-tab="error-tab">Error Summary</button>
                 <button class="tab-button" data-tab="soap-tab">Parsed XMLs</button>
                 <button class="tab-button" data-tab="search-tab">Search Tools</button>
 				<button class="tab-button" data-tab="rawlogs-tab">View Raw Logs</button>
             </div>
-
-            <!-- Manage Logs Tab -->
-            <div id="logsmanage-tab" class="tab-content active">
-			
-			</div>
-			
+	
             <!-- Error Summary Tab -->
-            <div id="error-tab" class="tab-content">
+            <div id="error-tab" class="tab-content active">
 
 				 <div class="section-header">
 					<h2>📄 Summary of Errors Found</h2>
 				 </div>
 				 <div class="filter-row">
 					<div class="log-controls">
-					  <button id="openDownloadModalBtn">📥 Download Remote Logs</button>
+					  <button id="openDownloadModalBtn" class="download-btn">📥 Download Remote Logs</button>
 
 					  <!-- 🔍 Analyze Logs radio group -->
 					  <label class="analyze-label" style="margin-left: 1rem;">🔍 Select Option:</label>
@@ -53,13 +47,13 @@
 
 					  <!-- 📁 Dropdown -->
 					  <!-- label for="logSelect" style="margin-left: 1rem;">📁 Log file:</label -->
-					  <select id="logSelect"></select>
+					  <select id="logSelect" class="searchtoolfilters-select"></select>
 
 					  <!-- 🔄 Refresh Log list -->
 					  <button id="refreshBtn" title="Refresh Log List">🔄</button>
 
 					  <!-- 🧪 Start -->
-					  <button id="startAnalysisBtn" style="margin-left: 1rem;">🧪 Review Logs</button>
+					  <button id="startAnalysisBtn" class="reviewlogs-btn">🧪 Review Logs</button>
 
 					</div>
 				 </div>
@@ -195,8 +189,7 @@
 						<!-- Filled by JS -->
 					  </tbody>
 					</table>
-				</div>
-				
+				</div>				
             </div>
 
 				<!-- 🔄 Search Progress Modal -->
@@ -224,8 +217,6 @@
 				  </div>
 				</div>
 
-				 
-
 				<!-- View Raw Logs Tab -->
 				<div id="rawlogs-tab" class="tab-content">
 					<!-- 🔍 View Raw Logs Section START -->
@@ -235,7 +226,7 @@
 
 					<!-- 🔍 View Logs options -->
 					<div class="logview-controls">
-						<label class="logview-label" style="margin-left: 1rem;">🔍 Select File:</label>
+						<!-- label class="logview-label" style="margin-left: 1rem;">🔍 Select File:</label -->
 						<select id="logview-file-select" class="logview-file-select">
 							<option value="">-- Select Target File --</option>
 						</select>
@@ -244,7 +235,7 @@
 					</div><br>
 					<div class="logview-controls">
 						<input type="text" id="logview-search-input" class="logview-search-input" placeholder="✏️ Type here and click Search.">
-						<label><input type="checkbox" id="logview-whole-word">✅ Whole word</label>
+						<label class="logview-label"><input type="checkbox" id="logview-whole-word">✅ Whole word</label>
 						<button id="logview-search-btn" class="logview-search-btn" title="🔍 Search">🔍 Search</button>
 						<button id="logview-prev-btn" class="logview-icon-btn" title="Find Previous">Prev ⏪</button>
 						<button id="logview-next-btn" class="logview-icon-btn" title="Find Next">Next ⏩</button>
@@ -271,7 +262,7 @@
 			  <div class="modal-box">
 				<div class="modal-content">
 				  <h2>🔍 Analyzing logs, please wait...</h2>
-				  <p>This may take a few seconds depending on file size and/or number of lines to process.</p><br>
+				  <p>This may take time, depending on file size and/or number of lines to process.</p><br>
 				  <p>First, the system is checking for errors from the logs.</p>
 				  <p>Then, parsing and caching XMLs from the logs.</p>
 				</div>
@@ -332,10 +323,6 @@
 				   🗂️ Filename or pattern [default: matrixtdp4.log*]:<br>
 				   <input type="text" id="scpPattern" placeholder="matrixtdp4.log*">
 				</div>
-				<div class="loading-spinner" id="downloadSpinner" style="display:none; text-align:center;">
-				   ⏳ Downloading logs from remote server...<br>
-				   ⚠️ Please do not refresh or reload the page.
-				</div>
 				<div class="modal-actions">
 				   <button id="downloadLogsBtn" onclick="handleRemoteLogDownload()">
 				   <span class="spinner" style="display:none;"></span>
@@ -345,6 +332,7 @@
 				</div>
 				<div id="downloadProgressWrapper" style="display:none;">
 				   <div class="progress-bar">
+				   	  <div class="loading-spinner" id="downloadSpinner" style="display:none; text-align:center;"></div>
 					  <div class="progress-fill" style="width: 0%;"></div>
 				   </div>
 				   <div id="progressText" class="progress-text">0% | ETA: calculating...</div>

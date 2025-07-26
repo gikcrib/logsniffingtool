@@ -16,7 +16,7 @@ body::after {
 }
 
 .container {
-  padding: 40px 60px;
+  padding: 10px 60px;
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -443,7 +443,7 @@ select:disabled option {
 
 .progress-bar {
   width: 100%;
-  height: 14px;
+  height: 30px;
   background-color: #ddd;
   border-radius: 8px;
   overflow: hidden;
@@ -783,7 +783,7 @@ pre, .xml-viewer {
 }
 
 .tab-button.active {
-    background: #007bff;
+    background: #4a6fa5;
     color: white;
 }
 
@@ -853,24 +853,22 @@ pre, .xml-viewer {
  
 /* =========================== Services SOAP XML RQ/RS Section - START =========================== */ 
 
-/* RQ/RS Table Container */
+/*
 .rqrs-table-container {
   background: var(--table-alt-row);
   border: 1px solid var(--border-color);
-  border-radius: 12px; /* This creates the oval/rounded edges */
+  border-radius: 12px; 
   padding: 10px;
   margin-bottom: 1em;
   font-size: 14px;
   line-height: 1.6;
-  overflow: hidden; /* Ensures child elements respect the rounded corners */
-}
+  overflow: hidden;
 
-/* Table styling inside the container */
 .rqrs-table-container table {
   width: 100%;
   border-collapse: collapse;
-  border-radius: 8px; /* Slightly less than container for visual harmony */
-  overflow: hidden; /* Important for table rounding to show */
+  border-radius: 8px;
+  overflow: hidden; 
 }
 
 .rqrs-table-container th,
@@ -891,7 +889,7 @@ pre, .xml-viewer {
 
 .rqrs-table-container tr:hover {
   background-color: var(--table-hover-bg);
-}
+}*/
 
 /* =========================== Services SOAP XML RQ/RS Section - END =========================== */ 
 
@@ -937,7 +935,7 @@ pre, .xml-viewer {
   transform: scale(1.1);
 }
 
-.searchtoolfilters-select {
+/*.searchtoolfilters-select {
   padding: 8px 15px;
   border: 2px solid #4a6fa5;
   border-radius: 20px;
@@ -947,15 +945,15 @@ pre, .xml-viewer {
   margin: 0 10px;
   cursor: pointer;
   transition: all 0.3s ease;
-}
+}*/
 
-.searchtoolfilters-select:focus {
+/*.searchtoolfilters-select:focus {
   outline: none;
   border-color: #3a56a0;
   box-shadow: 0 2px 8px rgba(74, 111, 165, 0.2);
-}
+}*/
 
-.searchtoolfilters-button {
+/*.searchtoolfilters-button {
   padding: 10px 25px;
   background-color: #4a6fa5;
   color: white;
@@ -978,16 +976,15 @@ pre, .xml-viewer {
   transform: translateY(0);
   box-shadow: 0 2px 5px rgba(74, 111, 165, 0.3);
 }
-
+*/
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .searchtoolfilters-input {
+/*  .searchtoolfilters-input {
     width: 100%;
     margin-bottom: 10px;
-  }
+  }*/
   
-  .searchtoolfilters-label,
-  .searchtoolfilters-select {
+  .searchtoolfilters-label {
     margin: 5px 0;
     display: block;
   }
@@ -1000,7 +997,7 @@ pre, .xml-viewer {
     padding: 8px 12px;
     background-color: #f5f5f5;
     border: 1px solid #ddd;
-	border-left: 4px solid #3498db;
+	  border-left: 4px solid #3498db;
     border-radius: 4px;
     font-family: monospace;
     text-align: left;
@@ -1009,6 +1006,7 @@ pre, .xml-viewer {
 }
 
 /* Search results table styling */
+.rqrs-table-container,
 .searchtool-table-container {
   background: var(--table-alt-row);
   border: 1px solid var(--border-color);
@@ -1020,6 +1018,8 @@ pre, .xml-viewer {
   overflow: hidden; /* Ensures child elements respect the rounded corners */
 }
 
+
+.rqrs-table-container table,
 .searchtool-table-container table {
   width: 100%;
   border-collapse: collapse;
@@ -1027,6 +1027,8 @@ pre, .xml-viewer {
   overflow: hidden; /* Important for table rounding to show */
 }
 
+.rqrs-table-container th,
+.rqrs-table-container td,
 .searchtool-table-container th,
 .searchtool-table-container td {
   padding: 8px;
@@ -1034,19 +1036,23 @@ pre, .xml-viewer {
   border-bottom: 1px solid var(--border-color);
 }
 
+.rqrs-table-container th,
 .searchtool-table-container th {
   background-color: var(--table-header-bg);
   font-weight: bold;
 }
 
+.rqrs-table-container tr:nth-child(even),
 .searchtool-table-container tr:nth-child(even) {
   background-color: var(--table-alt-row);
 }
 
+.rqrs-table-container tr:hover,
 .searchtool-table-container tr:hover {
   background-color: var(--table-hover-bg);
 }
 
+.log-table,
 .searchtooltable {
   width: 100%;
   table-layout: fixed; /* Makes columns equal width */
@@ -1061,16 +1067,20 @@ pre, .xml-viewer {
 }
 
 /* Equal width for all columns */
+.log-table th,
+.log-table td,
 .searchtooltable th,
 .searchtooltable td {
   width: 20%; /* 100% divided by 5 columns */
 }
 
+.log-table thead,
 .searchtooltable thead {
   background-color: #4a6fa5;
   color: white;
 }
 
+.log-table th,
 .searchtooltable th {
   padding: 12px 15px;
   text-align: left;
@@ -1081,18 +1091,22 @@ pre, .xml-viewer {
   text-overflow: ellipsis;
 }
 
+.log-table tbody tr,
 .searchtooltable tbody tr {
   transition: background-color 0.2s ease;
 }
 
+.log-table tbody tr:nth-child(even),
 .searchtooltable tbody tr:nth-child(even) {
   background-color: #f8faff;
 }
 
+.log-table tbody tr:hover,
 .searchtooltable tbody tr:hover {
   background-color: #e6efff;
 }
 
+.log-table td,
 .searchtooltable td {
   padding: 12px 15px;
   border-bottom: 1px solid #e0e7ff;
@@ -1101,6 +1115,7 @@ pre, .xml-viewer {
   word-wrap: break-word; /* Handle long content */
 }
 
+.log-table td:first-child,
 .searchtooltable td:first-child {
   font-weight: 500;
   color: #3a56a0;
@@ -1287,6 +1302,7 @@ pre, .xml-viewer {
 }
 
 /*** Log Viewer Styles START ***/
+.searchtoolfilters-select,
 .logview-file-select {
     min-width: 300px;
     padding: 8px;
@@ -1295,6 +1311,9 @@ pre, .xml-viewer {
     margin-right: 8px;
 }
 
+.download-btn,
+.reviewlogs-btn,
+.searchtoolfilters-button,
 .logview-refresh-btn,
 .logview-load-btn,
 .logview-search-btn,
@@ -1310,12 +1329,29 @@ pre, .xml-viewer {
     transition: background-color 0.2s;
 }
 
+.download-btn:hover,
+.reviewlogs-btn:hover,
+.searchtoolfilters-button:hover,
 .logview-refresh-btn:hover,
 .logview-load-btn:hover,
 .logview-search-btn:hover,
 .logview-icon-btn:hover,
 .logview-copy-btn:hover {
-    background-color: #3a5a80;
+  background-color: #3a56a0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(74, 111, 165, 0.4);
+}
+
+..download-btn:active,
+.reviewlogs-btn:active,
+.searchtoolfilters-button:active,
+.logview-refresh-btn:active,
+.logview-load-btn:active,
+.logview-search-btn:active,
+.logview-icon-btn:active,
+.logview-copy-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 5px rgba(74, 111, 165, 0.3);
 }
 
 #logview-prev-btn {
@@ -1328,6 +1364,7 @@ pre, .xml-viewer {
     border-bottom-left-radius: 0;
 }
 
+.searchtoolfilters-input,
 .logview-search-input {
     padding: 8px;
     border: 1px solid #ccc;
@@ -1508,264 +1545,3 @@ pre, .xml-viewer {
 
 
 /* =========================== Search Tools Section - END =========================== */ 
-
-/* =========================== UNUSED - START =========================== */
-
-/**
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 1rem;
-}
-
-.controls select,
-.controls button {
-  padding: 5px 10px;
-}
-
-#themeToggle {
-  margin-left: auto;
-  cursor: pointer;
-}
-
-#logTableWrapper {
-  overflow-x: auto;
-}
-
-.xml-viewer {
-  position: relative;
-  background: var(--table-alt-row);
-  border: 1px solid var(--border-color);
-  padding: 10px;
-  margin-top: 10px;
-  overflow: auto;
-}
-
-pre.xml {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: monospace;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-#xmlTools {
-  position: absolute;
-  top: 5px;
-  right: 10px;
-}
-
-#xmlTools button {
-  padding: 4px 8px;
-}
-
-.section-header button {
-  padding: 4px 10px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.log-error {
-  color: red;
-  font-weight: bold;
-}
-
-.log-warn {
-  color: orange;
-}
-
-.log-fatal {
-  color: white;
-  background-color: red;
-  padding: 0 4px;
-  border-radius: 4px;
-  font-weight: bold;
-}
-
-.loading {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-th.sortable.asc::after {
-  content: '⬆️';
-  opacity: 1;
-}
-
-th.sortable.desc::after {
-  content: '⬇️';
-  opacity: 1;
-}
-
-.controls {
-  display: none;
-}
-
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 60px; 
-}
-
-.modal-content h3 {
-  margin-top: 0;
-  font-size: 1.25rem;
-}
-
-.modal-content button {
-  margin-top: 1rem;
-  padding: 8px 16px;
-  border: none;
-  background-color: var(--highlight);
-  color: white;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.95rem;
-}
-
-.modal-content button:hover {
-  background-color: #005fa3;
-}
-
-pre.xml-modal-content {
-  background: #f4f4f4;
-  padding: 1em;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.modal .close {
-  color: #aaa;
-  float: right;
-  font-size: 28px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.modal .close:hover {
-  color: #000;
-}
-
-.close {
-  color: #aaa;
-  float: right;
-  font-size: 24px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-#logContextModal .modal-content {
-  width: 90vw;
-  max-width: 1200px;
-  max-height: 80vh;
-  overflow-y: auto;
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  padding: 24px;
-  font-family: monospace;
-  white-space: pre-wrap;
-  font-size: 13px;
-  line-height: 1.4;
-  border-radius: 12px;
-}
-
-#remoteLogOverlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.6); 
-  display: none;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
-
-#remoteLogOverlay.loading {
-  display: flex;
-  pointer-events: none;
-  opacity: 0.6;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-pre.xml {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-x: auto;
-  background: #f4f4f4;
-  padding: 10px;
-  border: 1px solid #ccc;
-  max-height: 400px;
-  display: block;
-}
-
-.loading-message {
-  margin-top: 10px;
-  color: var(--text-primary);
-  font-style: italic;
-  animation: pulse 1.2s infinite;
-}
-
-@keyframes pulse {
-  0%   { opacity: 0.3; }
-  50%  { opacity: 1; }
-  100% { opacity: 0.3; }
-}
-
-.xml-modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0,0,0,0.6);
-}
-
-.xml-modal-content {
-  background-color: #fefefe;
-  margin: 10% auto;
-  padding: 20px;
-  border: 2px solid #888;
-  width: 80%;
-  max-height: 70%;
-  overflow-y: auto;
-  border-radius: 12px;
-}
-
-.xml-modal-close {
-  float: right;
-  font-size: 28px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.xml-modal-title {
-  margin-top: 0;
-  color: #007bff;
-}
-
-.xml-modal-pre {
-  white-space: pre-wrap;
-  min-height: 150px;
-  max-height: 500px;
-  overflow-y: auto;
-  background: #f4f4f4;
-  padding: 10px;
-  font-family: monospace;
-  border-radius: 8px;
-}
-
-**/
-/* =========================== UNUSED - end =========================== */ 

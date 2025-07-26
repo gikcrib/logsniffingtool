@@ -1,13 +1,5 @@
-<!--Main JS Scripts --->
+// Main JS scripts
 
- let isDownloading = false;
- let abortRequested = false;
- let controller = null;
- let scpParams = {};
- let scpProgressSource = null;
- let scpSource = null;
- let pollingInterval = null;
- 
  function escapeHTML(str) {
    return str.replace(/[&<>'"]/g, char => ({
 	 '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
@@ -334,6 +326,10 @@ async function analyzeLogs() {
 	// ✅ After error summary is updated, populate RQRS (only for specific mode)
 	if (mode === "specific" && selectedLog) {
 	  rqrsPromise = fetchRQRS(selectedLog);
+	} else {
+	  // 🧩 Update table
+	  const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+	  rqrsTableBody.innerHTML = ""; // Clear old rows
 	}
 
 	// ✅ Enable/Disable Filters + Clear Button Dynamically
@@ -457,7 +453,7 @@ function resetDownloadModal() {
   scpParams = {};
   document.getElementById("scpHost").value = "";
   document.getElementById("scpUser").value = "remotedeploy";
-  document.getElementById("scpDir").value = "/datalex/logs/jboss";
+  document.getElementById("scpDir").value = "/datalex/logs/";
   document.getElementById("scpPattern").value = "matrixtdp4.log*";
   const downloadBtn = document.getElementById("downloadLogsBtn");
   const cancelBtn = document.getElementById("cancelDownloadBtn");
@@ -489,7 +485,7 @@ async function proceedWithDownload(clearExisting) {
 
   overlay.dataset.state = "loading";
   spinner.style.display = "block";
-  spinner.innerHTML = "⏳ Downloading logs from remote server...<br>⚠️ Please do not refresh or reload the page.";
+  spinner.innerHTML = "⏳";
   progressWrapper.style.display = "block";
   progressFill.style.width = "0%";
   progressText.textContent = "0% | Starting...";
@@ -1134,7 +1130,7 @@ async function fetchAndDisplayXMLForModal(log, index, tag) {
 	console.error("❌ Exception while fetching/displaying XML:", err);
   } finally {
 	// ✅ Step 12: Always hide the loading modal after a delay
-	hideLoadingXmlModal(3000); // auto-close after 3 seconds
+	hideLoadingXmlModal(1000); // auto-close after 1 second
   }
 }
 

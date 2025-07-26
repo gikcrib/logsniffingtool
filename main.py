@@ -13,17 +13,23 @@ from xml.dom import minidom
 from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from enum import Enum, IntEnum
 from typing import Dict, Any, Optional
 import uvicorn, shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading, psutil, signal, traceback, zipfile, tarfile, gzip
 
 
 # Initialize logging - Optimizing FastAPI Log Processing Application
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Add handler only if no handlers exist
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    ))
+    logger.addHandler(handler)
+    logger.propagate = False  # Prevent duplicate logs from root logger
 
 # Initialize FastAPI
 app = FastAPI()
@@ -51,7 +57,8 @@ templates = Jinja2Templates(directory="templates")
 # Configuration
 LOG_DIR = "./logs"
 MAX_CACHE_SIZE = 10
-PRELOAD_ENABLED = False  # Set to False to disable startup preloading
+PRELOAD_ENABLED = True  # Set to False to disable startup preloading
+PRELOAD_LARGE_FILES = True  # Set to False to disable large file preloading
 
 SCP_PROGRESS = {"percent": 0, "eta": 0}
 SCP_PROC = None
@@ -77,8 +84,6 @@ class SearchRequest(BaseModel):
     search_mode: str
     target_file: Optional[str] = None
 
-# Log directory
-# LOG_DIR = './logs/'
 
 # Regex patterns
 TIMESTAMP_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d{3}')
@@ -255,77 +260,87 @@ def extract_service(line: str) -> str:
         return matches[-1].split(".")[-1]
     return "UNKNOWN"
 
-def smart_preload_rqrs():
-    logger.info(f"[⚡] Smart preload started...")
-    process = psutil.Process(os.getpid())
-    logger.info(f"Memory before: {process.memory_info().rss / (1024 * 1024):.2f} MB")
-    global RQRS_CACHE, LOG_CACHE_META
-    updated_cache, updated_meta = {}, {}
 
-    for file in os.listdir(LOG_DIR):
-        full_path = os.path.join(LOG_DIR, file)
-        if not os.path.isfile(full_path):
-            continue
-        try:
-            mtime = os.path.getmtime(full_path)
-        except Exception:
-            continue
-        updated_meta[file] = mtime
-        if file not in LOG_CACHE_META or LOG_CACHE_META[file] != mtime:
-            with open(full_path, encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()
-            entries = []
-            for idx in range(1, len(lines)):
-                current = lines[idx].strip()
-                match = re.search(r'<([a-zA-Z_][\w]*?(RQ|RS))[\s>]', current)
-                if match:
-                    is_inline_xml = bool(re.match(r'^\d{4}-\d{2}-\d{2}', current))
-                    line_number = idx + 1
-                    source_line = current if is_inline_xml else lines[idx - 1].strip()
+async def process_and_cache_file(filename: str):
+    try:
+        await file_processor.set_status(filename, FileStatus.PROCESSING)
+        result = await parse_log_file(filename)
+        await file_processor.cache_result(filename, result)
+    except Exception as e:
+        await file_processor.set_status(filename, FileStatus.ERROR)
+        logger.error(f"Error processing {filename}: {str(e)}")
 
-                    # ✅ Match known thread ID formats
-                    thread_match = re.search(r'\[(NDC_[^\]]+?)\]', source_line) or \
-                                   re.search(r'\[NA\] \[([^\]]+?)\] \[NA\]', source_line)
+async def preload_files_async():
+    """Background task for file preloading"""
+    if PRELOAD_LARGE_FILES:
+        large_files = [f for f in os.listdir(LOG_DIR) 
+                     if os.path.getsize(os.path.join(LOG_DIR, f)) > 100 * 1024 * 1024]
+        
+        # Process up to 2 large files concurrently
+        semaphore = asyncio.Semaphore(2)
+        tasks = [process_with_semaphore(semaphore, f) for f in large_files]
+        await asyncio.gather(*tasks)
+    
+    await async_preload_logs()
 
-                    if thread_match:
-                        thread_id = thread_match.group(1)
-                    else:
-                        # ✅ Fallback: Match pattern like 1751502945348_9656 inside any [bracket]
-                        bracketed = re.findall(r'\[([^\[\]]+)\]', source_line)
-                        thread_id = next((x for x in bracketed if re.match(r'\d{13}_\d{4,}', x)), "UNKNOWN")
+async def process_with_semaphore(semaphore, filename):
+    async with semaphore:
+        await process_and_cache_file(filename)
 
-                    # 🪵 Debugging aid
-                    print(f"[🧩 RQRS] smart_preload → source_line: {source_line}")
-                    print(f"[🧩 RQRS] smart_preload → thread_id: {thread_id}")
-
-                    root_tag = match.group(1)
-                    entries.append({
-                        "line": line_number,
-                        "thread": thread_id,
-                        "tag": root_tag,
-                        "raw": current
-                    })
-            updated_cache[file] = entries
-        else:
-            updated_cache[file] = RQRS_CACHE.get(file, [])
-
-    RQRS_CACHE = updated_cache
-    LOG_CACHE_META = updated_meta
-    logger.info(f"Memory after: {process.memory_info().rss / (1024 * 1024):.2f} MB")
-    logger.info(f"[⚡] Smart preload completed...")
+async def preload_large_files():
+    """Cache large files at startup"""
+    large_files = [
+        f for f in os.listdir(LOG_DIR)
+        if os.path.isfile(os.path.join(LOG_DIR, f)) and 
+           os.path.getsize(os.path.join(LOG_DIR, f)) > 100 * 1024 * 1024  # >100MB
+    ]
+    
+    if not large_files:
+        return
+    
+    logger.info(f"Found {len(large_files)} large files to preload")
+    
+    # Process files with limited concurrency
+    semaphore = asyncio.Semaphore(2)  # Process 2 large files at a time
+    
+    async def process_file(file):
+        async with semaphore:
+            try:
+                logger.info(f"Preloading large file: {file}")
+                start_time = time.time()
+                await parse_log_file(file)
+                logger.info(f"Preloaded {file} in {time.time()-start_time:.2f}s")
+            except Exception as e:
+                logger.error(f"Failed to preload {file}: {str(e)}")
+    
+    await asyncio.gather(*[process_file(file) for file in large_files])
 
 @app.on_event("startup")
 async def startup_event():
-    # Start the server immediately
     logger.info("FastAPI server starting...")
     logger.info(f"Log directory: {os.path.abspath(LOG_DIR)}")
-    
-    # Start preload in background only if enabled
+
+    # Initialize critical endpoints first
+    await initialize_critical_services()
+
     if PRELOAD_ENABLED:
-        asyncio.create_task(async_preload_logs())
-        logger.info("Server started with file monitoring")
+        # Start background preload as low-priority task
+        asyncio.create_task(delayed_background_preload())
+        logger.info("Background preload will start after server becomes responsive")
     else:
         logger.info("Skipping preload (PRELOAD_ENABLED=False)")
+
+async def initialize_critical_services():
+    """Initialize essential services before accepting requests"""
+    logger.info("Initializing critical services...")
+    # Add any essential initialization here
+    pass
+
+async def delayed_background_preload():
+    """Start background preload after a short delay"""
+    await asyncio.sleep(10)  # Wait for server to become fully responsive
+    logger.info("Starting background preload now")
+    await background_preload()
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui(request: Request):
@@ -336,12 +351,26 @@ async def serve_ui(request: Request):
 ################################
 
 @app.middleware("http")
-async def memory_middleware(request: Request, call_next):
+async def combined_middleware(request: Request, call_next):
+    # 1. First define critical endpoints (at the top of the middleware)
+    CRITICAL_ENDPOINTS = os.getenv('CRITICAL_ENDPOINTS', '').split(',') + [
+        '/list_logs',
+        '/healthcheck',
+        '/get_rqrs'
+    ]
+
+    # 2. Endpoint Prioritization Logic (NEW)
+    if request.url.path in CRITICAL_ENDPOINTS:
+        # Add small delay for background tasks to prioritize user requests
+        if request.headers.get('x-request-priority') == 'background':
+            await asyncio.sleep(0.1)  # 100ms delay for background tasks
+        return await call_next(request)
+        
+    # --- Original Memory Protection Logic ---
     process = psutil.Process()
     system_mem = psutil.virtual_memory()
     
-    # --- Memory Protection Check (NEW) ---
-    if system_mem.percent > 90 or system_mem.available < 100 * 1024 * 1024:  # 100MB threshold
+    if system_mem.percent > 90 or system_mem.available < 100 * 1024 * 1024:
         error_msg = {
             "error": "Server memory constrained",
             "detail": {
@@ -353,45 +382,41 @@ async def memory_middleware(request: Request, call_next):
         print(f"🚨 MEMORY PROTECTION TRIGGERED: {error_msg}")
         return JSONResponse(error_msg, status_code=503)
     
-    # --- Before request ---
-    mem_before = process.memory_info().rss / 1024 / 1024  # MB
+    # --- Before request metrics ---
+    mem_before = process.memory_info().rss / 1024 / 1024
     start_time = time.time()
     
     try:
-        # --- Process request ---
         response = await call_next(request)
         
     except Exception as e:
-        # --- Error Handling ---
         elapsed = time.time() - start_time
         print(f"❌ Error in {request.url.path}: {str(e)} [{elapsed:.2f}s]")
         raise
     
-    # --- After request ---
+    # --- After request metrics ---
     mem_after = process.memory_info().rss / 1024 / 1024
     elapsed = time.time() - start_time
     memory_used = mem_after - mem_before
     
-    # --- System Memory Check ---
-    if system_mem.percent > 80:
+    if system_mem.percent > 50:
         print(f"🚨 WARNING: System memory at {system_mem.percent}%")
         print(f"    Available: {system_mem.available/1024/1024:.1f}MB")
         print(f"    Used by Python: {mem_after:.1f}MB")
         print(f"    Request consumed: {memory_used:.1f}MB")
     
-    # --- Per-Request Metrics ---
     endpoint_metrics[request.url.path] = {
         "memory_used_mb": round(memory_used, 2),
         "system_memory_percent": system_mem.percent,
         "time_sec": round(elapsed, 2),
-        "timestamp": datetime.now().isoformat()  # NEW: Added timestamp
+        "timestamp": datetime.now().isoformat()
     }
     
-    # --- Request Timing Log ---
     status_code = getattr(response, "status_code", 500)
-    print(f"{request.method} {request.url.path} ({status_code}) {elapsed:.2f}s | +{memory_used:.1f}MB")  # Enhanced logging
+    print(f"{request.method} {request.url.path} ({status_code}) {elapsed:.2f}s | +{memory_used:.1f}MB")
     
     return response
+
 # Your regular endpoints (no decorators needed)
 @app.get("/light")
 async def light_endpoint():
@@ -528,12 +553,18 @@ async def download_remote_logs(request: Request, req: SCPDownloadRequest):
                 if SCP_PROC.returncode == 0:
                     print("✅ SCP completed successfully.")
                     extract_compressed_files()  # 🆕 Extract logs after SCP
-                    smart_preload_rqrs()
+                    # smart_preload_rqrs()
+                    list_log_files()
+                    list_logs()
+                    async_preload_logs()
                 else:
                     # Allow empty stderr if returncode is still 0
                     if stderr.strip() == "":
                         print("⚠️ SCP ended with no error output but returned a non-zero exit code.")
-                        smart_preload_rqrs()
+                        # smart_preload_rqrs()
+                        list_log_files()
+                        list_logs()
+                        async_preload_logs()
                     else:
                         scp_status["error"] = f"SCP failed: {stderr.strip()}"
             else:
@@ -670,6 +701,70 @@ RX_THREAD_FALLBACK = re.compile(r'\d{13}_\d{4,}')
 RX_ERRORS = re.compile(r'<(ns1:)?Errors>|<.*Error.*>|ErrorCode|WarningCode', re.IGNORECASE)
 
 
+class FileStatus(Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETE = "complete"
+    ERROR = "error"
+
+class Priority(IntEnum):
+    USER_REQUEST = 1  # Highest priority
+    BACKGROUND_PRELOAD = 2  # Lower priority
+
+class FileProcessor:
+    def __init__(self):
+        self.active_tasks: Dict[str, asyncio.Task] = {}
+        self.pending_requests: Dict[str, asyncio.Event] = {}
+        self.results: Dict[str, dict] = {}
+        self.lock = asyncio.Lock()
+    
+    async def process_file(self, filename: str, priority: Priority) -> dict:
+        async with self.lock:
+            # Return cached result if available
+            if filename in self.results:
+                return self.results[filename]
+            
+            # If already being processed, wait for completion
+            if filename in self.active_tasks:
+                if priority == Priority.USER_REQUEST and filename in self.pending_requests:
+                    # Cancel background preload for user requests
+                    self.active_tasks[filename].cancel()
+                    del self.active_tasks[filename]
+                else:
+                    await self.pending_requests[filename].wait()
+                    return self.results.get(filename)
+            
+            # Create new processing task
+            done_event = asyncio.Event()
+            self.pending_requests[filename] = done_event
+            
+            task = asyncio.create_task(
+                self._process_file(filename, done_event, priority),
+                name=f"process_{filename}"
+            )
+            self.active_tasks[filename] = task
+            
+        await done_event.wait()
+        return self.results.get(filename)
+    
+    async def _process_file(self, filename: str, done_event: asyncio.Event, priority: Priority):
+        try:
+            result = await parse_log_file(filename)
+            async with self.lock:
+                self.results[filename] = result
+        except asyncio.CancelledError:
+            logger.info(f"Processing of {filename} was cancelled (priority: {priority.name})")
+        except Exception as e:
+            logger.error(f"Error processing {filename}: {str(e)}")
+        finally:
+            async with self.lock:
+                done_event.set()
+                if filename in self.active_tasks:
+                    del self.active_tasks[filename]
+                if filename in self.pending_requests:
+                    del self.pending_requests[filename]
+
+file_processor = FileProcessor()
 ################################################
 # Manual Async LRU Cache Implementation - START
 ################################################
@@ -713,85 +808,6 @@ class AsyncLRUCache:
 # Global cache instance
 LOG_CACHE = AsyncLRUCache(maxsize=MAX_CACHE_SIZE)
 
-async def async_preload_logs():
-    """
-    Complete file monitoring solution without watchdog
-    - Handles initial preload
-    - Monitors for changes
-    - Processes changed files
-    """
-    try:
-        logger.info("[🔍] Starting file monitoring...")
-        
-        # First-time full preload
-        await initial_preload()
-        
-        # Continuous monitoring
-        while True:
-            await monitor_for_changes()
-            await asyncio.sleep(30)  # Check every 30 seconds
-            
-    except Exception as e:
-        logger.error(f"File monitoring failed: {str(e)}")
-
-async def initial_preload():
-    """Initial loading of all files"""
-    files = [f for f in os.listdir(LOG_DIR) if os.path.isfile(os.path.join(LOG_DIR, f))]
-    logger.info(f"[📦] Preloading {len(files)} files...")
-    await process_files(files)
-
-async def monitor_for_changes():
-    """Check for and process changed files"""
-    changed_files = []
-    
-    for file in os.listdir(LOG_DIR):
-        filepath = os.path.join(LOG_DIR, file)
-        if not os.path.isfile(filepath):
-            continue
-            
-        current_mtime = os.path.getmtime(filepath)
-        cached_data = await LOG_CACHE.get(file)
-        
-        # File is new or modified
-        if not cached_data or cached_data['metadata']['mtime'] != current_mtime:
-            changed_files.append(file)
-    
-    if changed_files:
-        logger.info(f"[🔄] Found {len(changed_files)} changed files")
-        await process_files(changed_files)
-
-async def process_files(files: list):
-    """Process a list of files and update cache"""
-    for file in files:
-        filepath = os.path.join(LOG_DIR, file)
-        
-        try:
-            mtime = os.path.getmtime(filepath)
-            entries = []
-            
-            async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                async for line in f:
-                    if stripped := line.strip():
-                        if "<" in stripped and (match := RX_RQRS.search(stripped)):
-                            entries.append({
-                                "tag": match.group(1),
-                                "raw": stripped[:512],
-                                # Add other fields as needed
-                            })
-            
-            await LOG_CACHE.set(file, {
-                "metadata": {
-                    "mtime": mtime,
-                    "size": os.path.getsize(filepath),
-                    "entries": len(entries)
-                },
-                "rqrs": entries
-            })
-            logger.info(f"[✅] Processed {file} ({len(entries)} entries)")
-            
-        except Exception as e:
-            logger.error(f"⚠️ Failed to process {file}: {str(e)}")
-
 
 ################################################
 # Manual Async LRU Cache Implementation - END
@@ -829,195 +845,408 @@ def process_line(line_number: int, current: str, previous: str):
         "has_issue": bool(RX_ERRORS.search(current))
     }
 
+def extract_xml_info(stripped_line, previous_line, line_number):
+    """Optimized XML extraction logic"""
+    if match := RX_RQRS.search(stripped_line):
+        is_inline_xml = bool(RX_DATE.match(stripped_line))
+        source_line = stripped_line if is_inline_xml else previous_line
+        
+        # Fast thread ID extraction - FIXED SYNTAX
+        thread_match = (RX_THREAD.search(source_line) or RX_ALT_THREAD.search(source_line))
+        thread_id = thread_match.group(1) if thread_match else None
+        if not thread_id:
+            bracketed = RX_BRACKETED.findall(source_line)
+            thread_id = next((x for x in bracketed if RX_THREAD_FALLBACK.match(x)), "UNKNOWN")
+        
+        return {
+            "line": line_number,
+            "thread": thread_id,
+            "tag": match.group(1),
+            "raw": stripped_line[:512],
+            "has_issue": bool(RX_ERRORS.search(stripped_line))
+        }
+    return None
+
 async def async_preload_logs():
-    """Preload logs at startup using AsyncLRUCache with detailed logging"""
-    logger.info("[⚡] Starting async preload of log files...")
+    """Optimized log preloading that processes all files regardless of size"""
+    # Initialize tracking variables
     process = psutil.Process(os.getpid())
     start_mem = process.memory_info().rss / (1024 * 1024)
-    logger.info(f"📊 Initial memory usage: {start_mem:.2f} MB")
+    start_time = time.time()
     
-    processed_files = 0
-    skipped_files = 0
-    failed_files = 0
-    total_entries = 0
+    logger.info(f"[⚡] Starting optimized async preload (initial memory: {start_mem:.2f} MB)")
+    
+    stats = {
+        'processed': 0,
+        'skipped': 0,
+        'failed': 0,
+        'total_entries': 0,
+        'total_lines': 0
+    }
 
-    for file in os.listdir(LOG_DIR):
+    # Create a semaphore for limited concurrent processing
+    # Reduced to 2 concurrent files to better handle large files
+    semaphore = asyncio.Semaphore(2)  # Process up to 2 files concurrently
+
+    async def process_single_file(file):
+        """Helper function to process a single file"""
+        nonlocal stats
         filepath = os.path.join(LOG_DIR, file)
         
-        # File validation checks
-        if not os.path.isfile(filepath):
-            logger.warning(f"⚠️ Skipping non-file: {file}")
-            skipped_files += 1
-            continue
-            
-        file_size = os.path.getsize(filepath) / (1024 * 1024)  # in MB
-        logger.info(f"\n📂 Processing file: {file} ({file_size:.2f} MB)")
-        
-        # Check cache first
-        if await LOG_CACHE.get(file) is not None:
-            logger.info(f"⏩ Already in cache, skipping: {file}")
-            skipped_files += 1
-            continue
-            
         try:
-            entries = []
-            line_count = 0
-            entry_count = 0
-            start_time = time.time()
-            
-            async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                previous_line = ""
-                
-                async for line in f:
-                    line_count += 1
-                    stripped = line.strip()
-                    
-                    if line_count % 10000 == 0:
-                        logger.debug(f"📜 Processing line {line_count:,}...")
-                    
-                    if "<" in stripped and (match := RX_RQRS.search(stripped)):
-                        # Detailed XML match logging
-                        logger.debug(f"🔍 Found XML at line {line_count}: {stripped[:100]}...")
-                        
-                        # Thread ID extraction
-                        is_inline_xml = bool(RX_DATE.match(stripped))
-                        source_line = stripped if is_inline_xml else previous_line
-                        thread_id = extract_thread_id(source_line)
-                        
-                        entries.append({
-                            "line": line_count,
-                            "tag": match.group(1),
-                            "thread": thread_id,
-                            "raw": stripped[:512],
-                            "has_issue": bool(RX_ERRORS.search(stripped))
-                        })
-                        entry_count += 1
-                    
-                    previous_line = stripped
-            
-            processing_time = time.time() - start_time
-            total_entries += entry_count
-            
-            await LOG_CACHE.set(file, {
-                "metadata": {
-                    "preloaded": True,
-                    "lines_processed": line_count,
-                    "entries_found": entry_count,
-                    "processing_time": round(processing_time, 2)
-                },
-                "rqrs": entries
-            })
-            
-            logger.info(f"✅ Successfully processed {file}")
-            logger.info(f"   Lines: {line_count:,} | Entries: {entry_count:,} | Time: {processing_time:.2f}s")
-            processed_files += 1
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to process {file}: {str(e)}", exc_info=True)
-            failed_files += 1
-            continue
-    
-    # Final summary
-    end_mem = process.memory_info().rss / (1024 * 1024)
-    logger.info("\n📊 Preload Summary:")
-    logger.info(f"  Processed files: {processed_files}")
-    logger.info(f"  Skipped files: {skipped_files} (already cached or invalid)")
-    logger.info(f"  Failed files: {failed_files}")
-    logger.info(f"  Total RQ/RS entries found: {total_entries:,}")
-    logger.info(f"  Memory usage: {start_mem:.2f} MB → {end_mem:.2f} MB")
-    logger.info(f"  Cache size: {len(LOG_CACHE.cache)}/{MAX_CACHE_SIZE} files")
+            async with semaphore:
+                # Skip non-files immediately
+                if not os.path.isfile(filepath):
+                    stats['skipped'] += 1
+                    return
 
+                # Check cache first
+                if await LOG_CACHE.get(file) is not None:
+                    stats['skipped'] += 1
+                    return
+
+                file_size = os.path.getsize(filepath) / (1024 * 1024)  # in MB
+                logger.info(f"Processing {file} ({file_size:.2f} MB)")
+
+                # Get the current process
+                process = psutil.Process(os.getpid())
+                
+                # Rate limiting - pause every few files
+                if stats['processed'] > 0 and stats['processed'] % 3 == 0:
+                    await asyncio.sleep(0.2)  # 200ms pause
+
+                # Process the file
+                file_start = time.time()
+                entries = []
+                line_count = 0
+                
+                # Special handling for very large files
+                if file_size > 100:
+                    logger.info(f"Processing large file {file} - this may take a while...")
+                    # More frequent progress updates for large files
+                    progress_interval = 100000
+                else:
+                    progress_interval = 10000
+
+                file_size = os.path.getsize(filepath) / (1024 * 1024)  # in MB
+                if file_size > 100:  # Only use chunked reading for large files
+                    logger.info(f"Processing large file {file} with chunked reading...")
+                    return await process_large_file_chunked(filepath, file)
+                else:
+                    # Process small files normally
+                    return await process_file_normal(filepath, file)
+                
+                async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    previous_line = ""
+                    line_count = 0
+
+                    async for line in f:
+                        line_count += 1
+                        stripped = line.strip()
+
+                        # Memory check for large files (every 50,000 lines)
+                        if file_size > 100 and line_count % 50000 == 0:
+                            current_mem = process.memory_info().rss / (1024 * 1024)
+                            logger.info(
+                                f"{file}: Line {line_count:,} - "
+                                f"Memory: {current_mem:.2f} MB - "
+                                f"Entries found: {len(entries)}"
+                            )
+                        
+                        # Progress reporting for large files
+                        if file_size > 100 and line_count % progress_interval == 0:
+                            logger.info(f"{file}: Processed {line_count:,} lines...")
+                        
+                        # Only process non-empty lines that might contain XML
+                        if stripped and "<" in stripped:
+                            if match := RX_RQRS.search(stripped):
+                                # Simplified thread ID extraction
+                                is_inline_xml = bool(RX_DATE.match(stripped))
+                                source_line = stripped if is_inline_xml else previous_line
+                                thread_id = extract_thread_id(source_line)
+                                
+                                entries.append({
+                                    'line': line_count,
+                                    'tag': match.group(1),
+                                    'thread': thread_id,
+                                    'raw': stripped[:512],
+                                    'has_issue': bool(RX_ERRORS.search(stripped))
+                                })
+                        
+                        previous_line = stripped
+                
+                # Update statistics
+                stats['processed'] += 1
+                stats['total_entries'] += len(entries)
+                stats['total_lines'] += line_count
+                
+                # Cache the results
+                await LOG_CACHE.set(file, {
+                    "metadata": {
+                        "preloaded": True,
+                        "lines_processed": line_count,
+                        "entries_found": len(entries),
+                        "processing_time": round(time.time() - file_start, 2),
+                        "file_size_mb": round(file_size, 2)
+                    },
+                    "rqrs": entries
+                })
+                
+                processing_time = time.time() - file_start
+                logger.info(f"Finished {file} ({line_count} lines, {len(entries)} entries) in {processing_time:.2f}s")
+                
+        except Exception as e:
+            logger.error(f"Failed to process {file}: {str(e)}")
+            stats['failed'] += 1
+
+    # Process all files using asyncio.gather for better concurrency
+    files = os.listdir(LOG_DIR)
+    await asyncio.gather(*[process_single_file(file) for file in files])
 
     # Final statistics
-    elapsed_time = time.time() - start_time
-    lines_per_sec = line_count / elapsed_time if elapsed_time > 0 else 0
+    end_mem = process.memory_info().rss / (1024 * 1024)
+    elapsed = time.time() - start_time
     
-    logger.info(f"[✅] Completed Parsing RQ/RS from {log}")
-    logger.info(f"[📊] Final Stats:")
-    logger.info(f"  Lines Processed: {line_count:,} ({lines_per_sec:,.1f} lines/sec)")
-    logger.info(f"  RQ/RS Entries Found: {len(entries):,}")
-    logger.info(f"  Time Elapsed: {format_time(elapsed_time)}")
-    logger.info(f"  Last Match Found at: {format_time(last_match_time - start_time)} into processing")
+    logger.info("\n📊 Final Preload Summary:")
+    logger.info(f"  Files processed: {stats['processed']}")
+    logger.info(f"  Files skipped (cached): {stats['skipped']}")
+    logger.info(f"  Files failed: {stats['failed']}")
+    logger.info(f"  Total lines scanned: {stats['total_lines']:,}")
+    logger.info(f"  Total RQ/RS entries found: {stats['total_entries']:,}")
+    logger.info(f"  Memory usage: {start_mem:.2f} MB → {end_mem:.2f} MB")
+    logger.info(f"  Total time: {elapsed:.2f} seconds")
+    logger.info(f"  Processing rate: {stats['total_lines']/elapsed if elapsed > 0 else 0:,.1f} lines/sec")
+    logger.info(f"  Cache size: {len(LOG_CACHE.cache)}/{MAX_CACHE_SIZE} files")
+
+async def process_file_normal(filepath, filename):
+    """Process normal-sized files (original method)"""
+    # [Your original file processing code here]
     
-    result = {
-        "metadata": {
-            "lines_processed": line_count,
-            "total_lines": total_lines,
-            "entries_found": len(entries),
-            "elapsed_seconds": round(elapsed_time, 2),
-            "processing_rate": round(lines_per_sec, 1),
-            "last_match_at": round(last_match_time - start_time, 2)
-        },
-        "rqrs": entries
+async def process_large_file_chunked(filepath, filename):
+    """Process large files in chunks"""
+    entries = []
+    line_count = 0
+    previous_line = ""
+    chunk_size = 1024 * 1024  # 1MB chunks
+    file_start = time.time()
+    
+    async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+        while True:
+            chunk = await f.read(chunk_size)
+            if not chunk:
+                break
+                
+            # Process each line in the chunk
+            for line in chunk.splitlines():
+                line_count += 1
+                stripped = line.strip()
+                
+                # Memory monitoring (every 50,000 lines)
+                if line_count % 50000 == 0:
+                    current_mem = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+                    logger.info(
+                        f"{filename}: Line {line_count:,} - "
+                        f"Memory: {current_mem:.2f} MB"
+                    )
+                
+                if stripped and "<" in stripped:
+                    if match := RX_RQRS.search(stripped):
+                        # [Your existing XML processing logic]
+                        entries.append({
+                            # [Your existing entry structure]
+                        })
+                
+                previous_line = stripped
+    
+    processing_time = time.time() - file_start
+    logger.info(
+        f"Finished chunked processing of {filename} - "
+        f"{line_count} lines, {len(entries)} entries in {processing_time:.2f}s"
+    )
+    
+    return {
+        "entries": entries,
+        "line_count": line_count,
+        "processing_time": processing_time
     }
-    
-    await LOG_CACHE.set(log, result)
-    return result
-    
+
 @app.get("/get_rqrs")
 async def get_rqrs(log: str):
-    """Endpoint that uses the optimized parser"""
-    return await parse_log_file(log)
+    """Endpoint that prioritizes user requests"""
+    try:
+        result = await file_processor.process_file(log, Priority.USER_REQUEST)
+        if result is None:
+            raise HTTPException(500, detail="Processing failed")
+        return result
+    except asyncio.CancelledError:
+        raise HTTPException(503, detail="Service unavailable, please retry")
+    except Exception as e:
+        raise HTTPException(500, detail=str(e))
 
+async def background_preload():
+    """Optimized background preload that minimizes impact"""
+    large_files = await get_large_files()
+    
+    # Process files with cooperative scheduling
+    for i, filename in enumerate(large_files):
+        try:
+            # Process file with lower priority
+            await file_processor.process_file(filename, Priority.BACKGROUND_PRELOAD)
+            
+            # Yield to event loop every 2 files
+            if i % 2 == 0:
+                await asyncio.sleep(0.1)  # Allow other tasks to run
+                
+        except Exception as e:
+            logger.error(f"Background preload failed for {filename}: {str(e)}")
 
+async def get_large_files():
+    """Get list of large files with cooperative yielding"""
+    files = []
+    for filename in os.listdir(LOG_DIR):
+        filepath = os.path.join(LOG_DIR, filename)
+        if os.path.isfile(filepath) and os.path.getsize(filepath) > 100 * 1024 * 1024:
+            files.append(filename)
+        
+        # Yield periodically during directory scanning
+        if len(files) % 10 == 0:
+            await asyncio.sleep(0)
+    
+    return files
+
+@app.get("/healthcheck")
+async def health_check():
+    """Lightweight endpoint to verify server responsiveness"""
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+async def process_large_file_in_background(log: str, timeout: int):
+    """Background task for large file processing"""
+    try:
+        result = await asyncio.wait_for(
+            parse_log_file(log),
+            timeout=timeout
+        )
+        progress_tracker.complete(log)
+        return result
+    except asyncio.TimeoutError:
+        progress_tracker.update(log, {"status": "timeout"})
+        logger.error(f"Background processing timed out for {log}")
+    except Exception as e:
+        progress_tracker.update(log, {"status": "error", "error": str(e)})
+        logger.error(f"Background processing failed for {log}: {str(e)}")
+
+@app.get("/file_status/{filename}")
+async def get_file_status(filename: str):
+    status = await file_processor.get_status(filename)
+    return {
+        "filename": filename,
+        "status": status.value,
+        "is_ready": status == FileStatus.COMPLETE
+    }
+
+@app.get("/get_progress")
+async def get_progress(self, filename: str) -> dict:
+    """Check progress of background processing"""
+    progress = progress_tracker.get_progress(log)
+    if not progress:
+        raise HTTPException(404, detail="No such task or task completed")
+    return {
+        "status": "processing" if filename in self.active_tasks else "ready",
+        "filename": filename,
+        "in_cache": filename in self.results
+    }
+
+@app.get("/parse_progress")
+async def get_parse_progress(log: str):
+    """Check progress of parsing"""
+    if log in progress_tracker.active_tasks:
+        return progress_tracker.active_tasks[log]
+    return {"status": "not_found"}
+    
 async def parse_log_file(log: str):
-    """Unified parsing using AsyncLRUCache"""
-    # 1. Try cache first
+    """Dramatically faster version using buffered reading"""
     if (cached := await LOG_CACHE.get(log)) is not None:
-        logger.info(f"[♻️] Cache HIT for {log}")
+        logger.info(f"Cache HIT for {log}")
         return cached
-    
-    # 2. Parse and cache
-    logger.info(f"[🔄] Cache MISS for {log}, processing...")
+
     filepath = os.path.join(LOG_DIR, log)
-    
     if not os.path.exists(filepath):
         raise HTTPException(404, detail="File not found")
-    
+
     start_time = time.time()
     entries = []
     line_count = 0
-    
+    previous_line = ""
+    last_report_time = start_time
+    chunk_size = 1024 * 1024  # 1MB chunks
+
     try:
-        # First pass: count lines
-        total_lines = 0
         async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            async for _ in f:
-                total_lines += 1
-        
-        # Second pass: process
-        async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            async for line in f:
-                line_count += 1
-                if line_count == 1:  # Skip header
-                    continue
-                    
-                stripped = line.strip()
-                if "<" in stripped:
-                    result = process_line(line_count, stripped, previous_line)
-                    if result:
-                        entries.append(result)
-                previous_line = stripped
+            while True:
+                chunk = await f.read(chunk_size)
+                if not chunk:
+                    break
                 
-                # Progress reporting
-                if line_count % 1000 == 0:
-                    await asyncio.sleep(0)
+                for line in chunk.splitlines():
+                    line_count += 1
+                    stripped = line.strip()
                     
+                    # Skip empty lines and header
+                    if not stripped or line_count == 1:
+                        continue
+                        
+                    if "<" in stripped:
+                        if entry := extract_xml_info(stripped, previous_line, line_count):
+                            entries.append(entry)
+                    
+                    previous_line = stripped
+                    
+                    # Progress reporting (throttled)
+                    current_time = time.time()
+                    if current_time - last_report_time > 5:  # Every 5 seconds
+                        logger.info(f"Processed {line_count:,} lines...")
+                        last_report_time = current_time
+                        await asyncio.sleep(0)  # Yield to event loop
+
+        logger.info(f"Finished {line_count:,} lines with {len(entries):,} entries in {time.time()-start_time:.2f}s")
+        
+        result = {
+            "metadata": {
+                "lines_processed": line_count,
+                "entries_found": len(entries),
+                "processing_time": round(time.time() - start_time, 2)
+            },
+            "rqrs": entries
+        }
+        
+        await LOG_CACHE.set(log, result)
+        return result
+
     except Exception as e:
         logger.error(f"Error processing {log}: {str(e)}")
         raise HTTPException(500, detail="Internal server error")
-    
-    result = {
-        "metadata": {
-            "lines_processed": line_count,
-            "entries_found": len(entries),
-            "processing_time": round(time.time() - start_time, 2)
-        },
-        "rqrs": entries
-    }
-    
-    await LOG_CACHE.set(log, result)
-    return result
+
+class ProgressTracker:
+    def __init__(self):
+        self.active_tasks = {}
+        
+    def start(self, log_file):
+        self.active_tasks[log_file] = {
+            'start_time': time.time(),
+            'lines_processed': 0,
+            'status': 'processing'
+        }
+        
+    def update(self, log_file, lines_processed):
+        if log_file in self.active_tasks:
+            self.active_tasks[log_file]['lines_processed'] = lines_processed
+            self.active_tasks[log_file]['elapsed'] = time.time() - self.active_tasks[log_file]['start_time']
+            
+    def complete(self, log_file):
+        if log_file in self.active_tasks:
+            self.active_tasks[log_file]['status'] = 'complete'
+
+progress_tracker = ProgressTracker()
 
 ### Debugging cached parsed XMLs
 @app.get("/debug_rqrs_cache")

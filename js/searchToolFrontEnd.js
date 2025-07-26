@@ -300,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // ✅ Populate the fileSelect dropdown on page load
     populateFileSelect();
 	});
-}); // <-- This is your existing closing bracket for DOMContentLoaded
+}); // END --- closing bracket for DOMContentLoaded function
 
 // ✅ Function to dynamically populate fileSelect dropdown
 async function populateFileSelect() {
