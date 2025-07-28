@@ -154,36 +154,63 @@ class LogViewer {
 	}
     
 	async loadSelectedFile() {
-		const selectedFile = this.fileSelect.value;
-		if (!selectedFile) {
-			this.showModal('Warning', 'Please select a file first');
-			return;
-		}
+	    const selectedFile = this.fileSelect.value;
+	    if (!selectedFile) {
+	        this.showModal('Warning', 'Please select a file first');
+	        return;
+	    }
 
-		try {
-			// Reset state
-			this.currentFile = selectedFile;
-			this.allLines = [];
-			this.totalLines = 0;
-			this.searchResults = [];
-			this.currentSearchIndex = -1;
-			
-			// Show loading state directly in the container
-			this.logContainer.innerHTML = '<div class="logview-loading">Loading file...<div class="loading-spinner"></div></div>';
-			
-			// Load file
-			const response = await fetch(`/api/logs/stream?filename=${encodeURIComponent(selectedFile)}`);
-			const data = await response.json();
-			
-			this.allLines = data.lines;
-			this.totalLines = data.total_lines;
-			
-			// Render all lines at once
-			this.renderAllLines();
-			this.updateStatus(`Loaded ${selectedFile} - ${this.totalLines.toLocaleString()} lines`);
-		} catch (error) {
-			this.showModal('Error', `Failed to load file: ${error.message}`);
-		}
+	    try {
+	        // Reset state
+	        this.currentFile = selectedFile;
+	        this.allLines = [];
+	        this.totalLines = 0;
+	        this.searchResults = [];
+	        this.currentSearchIndex = -1;
+	        
+	        // Show loading state
+	        this.logContainer.innerHTML = '<div class="logview-loading">Loading file...<div class="loading-spinner"></div></div>';
+	        
+	        // Load file with error handling for response
+	        const response = await fetch(`/api/logs/stream?filename=${encodeURIComponent(selectedFile)}`);
+	        
+	        if (!response.ok) {
+	            throw new Error(`HTTP error! status: ${response.status}`);
+	        }
+	        
+	        // Handle NDJSON stream
+	        const reader = response.body.getReader();
+	        const decoder = new TextDecoder();
+	        let result = '';
+	        
+	        while (true) {
+	            const { done, value } = await reader.read();
+	            if (done) break;
+	            
+	            result += decoder.decode(value, { stream: true });
+	            
+	            // Process complete JSON chunks (separated by \n\n)
+	            const chunks = result.split('\n\n');
+	            result = chunks.pop() || ''; // Keep incomplete chunk
+	            
+	            for (const chunk of chunks) {
+	                try {
+	                    const data = JSON.parse(chunk);
+	                    if (data.lines) {
+	                        this.allLines = data.lines;
+	                        this.totalLines = data.total_lines;
+	                        this.renderAllLines();
+	                        this.updateStatus(`Loaded ${selectedFile} - ${this.totalLines.toLocaleString()} lines`);
+	                    }
+	                } catch (e) {
+	                    console.error('Error parsing JSON chunk:', e);
+	                }
+	            }
+	        }
+	        
+	    } catch (error) {
+	        this.showModal('Error', `Failed to load file: ${error.message}`);
+	    }
 	}
 
     renderAllLines() {

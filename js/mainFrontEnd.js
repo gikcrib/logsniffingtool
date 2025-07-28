@@ -1,4 +1,12 @@
 // Main JS scripts
+// Global variables
+ let isDownloading = false;
+ let abortRequested = false;
+ let controller = null;
+ let scpParams = {};
+ let scpProgressSource = null;
+ let scpSource = null;
+ let pollingInterval = null;
 
  function escapeHTML(str) {
    return str.replace(/[&<>'"]/g, char => ({
@@ -1072,66 +1080,81 @@ function closeRqrsXmlModal() {
 
 // ✅ Fetches XML from backend and opens the custom-styled modal
 async function fetchAndDisplayXMLForModal(log, index, tag) {
-  // 📨 Step 1: Show in console what request is being made
   console.log("📨 Requesting XML content for:", { log, index, tag });
-
-  // 🕐 Step 2: Show loading modal while waiting for backend response
   showLoadingXmlModal();
 
   try {
-	// 🌐 Step 3: Send GET request to backend with log name, index, and XML tag
-	const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&index=${index}&tag=${encodeURIComponent(tag)}`);
+    const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&index=${index}&tag=${encodeURIComponent(tag)}`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-	// ❌ Step 4: Handle any error response (like 404 or 500)
-	if (!response.ok) {
-	  console.error("❌ Failed to load XML:", await response.text());
-	  hideLoadingXmlModal(0); // hide immediately if failed
-	  return;
-	}
+    const data = await response.json();
+    console.log("📦 Response data:", data);
 
-	// 📦 Step 5: Read the XML content from backend response as text
-	const rawXml = await response.text();
-	console.log("📦 Raw XML string received from backend:\n", rawXml);
+    if (!data.pretty_xml) {
+      throw new Error("No XML content in response");
+    }
 
-	// 🔍 Step 6: Get modal elements from the DOM
-	const modal = document.getElementById("customXmlModal");        // background/modal container
-	const title = document.getElementById("customModalTitle");      // modal heading
-	const content = document.getElementById("xmlContent");          // <pre> block for XML
-	const container = modal.querySelector(".custom-xml-container"); // inner wrapper
+    const modal = document.getElementById("customXmlModal");
+    const title = document.getElementById("customModalTitle");
+    const content = document.getElementById("xmlContent");
+    const container = modal.querySelector(".custom-xml-container");
 
-	// ❌ Step 7: Check if all modal elements are available
-	if (!modal || !title || !content || !container) {
-	  console.error("❌ Modal DOM elements not found.");
-	  hideLoadingXmlModal(0); // hide immediately on failure
-	  return;
-	}
+    if (!modal || !title || !content || !container) {
+      throw new Error("Modal elements not found");
+    }
 
-	// 🖊️ Step 8: Populate the modal with the XML content
-	title.textContent = `Tag: ${tag}`;        // set modal title text
-	content.textContent = rawXml.trim();      // display raw XML text (trimmed)
-	modal.style.display = "flex";             // make modal visible
-	content.style.display = "block";          // ensure XML content block is visible
+    title.textContent = `📄 ${tag}`;
+    content.textContent = data.pretty_xml;
+    modal.style.display = "flex";
+    content.style.display = "block";
 
-	// 🐞 Step 9: Debug logging — confirm modal is open and show raw size
-	console.log("✅ XML rendered in modal:", rawXml.length, "chars");
+    // Apply syntax highlighting if using highlight.js
+    if (window.hljs) {
+      hljs.highlightElement(content);
+    }
 
-	// 🐞 Step 10: Log the CSS class names used on each element
-	console.log("[DEBUG] Modal element class:", modal.className);
-	console.log("[DEBUG] Container element class:", container.className);
-	console.log("[DEBUG] Title element class:", title.className);
-	console.log("[DEBUG] Content element class:", content.className);
-
-	// 🐞 Step 11: Log the active computed styles (for visual debugging)
-	console.log("[DEBUG] Modal background:", getComputedStyle(modal).backgroundColor);
-	console.log("[DEBUG] Container box shadow:", getComputedStyle(container).boxShadow);
-	console.log("[DEBUG] Content font:", getComputedStyle(content).fontFamily, getComputedStyle(content).fontSize);
-
+    console.log("✅ XML displayed in UI");
   } catch (err) {
-	console.error("❌ Exception while fetching/displaying XML:", err);
+    console.error("❌ Error displaying XML:", err);
+    showToast("❌ Failed to load XML content");
   } finally {
-	// ✅ Step 12: Always hide the loading modal after a delay
-	hideLoadingXmlModal(1000); // auto-close after 1 second
+    hideLoadingXmlModal(500);
   }
+}
+
+function copyXmlContent() {
+  // Get the XML content element
+  const xmlContent = document.getElementById('xmlContent');
+  
+  // Create a range and select the text
+  const range = document.createRange();
+  range.selectNode(xmlContent);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  
+  // Copy the selected text
+  try {
+    const successful = document.execCommand('copy');
+    if (successful) {
+      // Temporarily change button text to show success
+      const copyBtn = document.querySelector('.custom-xml-copy-btn');
+      const originalText = copyBtn.textContent;
+      copyBtn.textContent = '✓ Copied!';
+      
+      // Revert after 2 seconds
+      setTimeout(() => {
+        copyBtn.textContent = originalText;
+      }, 2000);
+    }
+  } catch (err) {
+    console.error('Failed to copy: ', err);
+  }
+  
+  // Clean up
+  window.getSelection().removeAllRanges();
 }
 
 // ✅ Closes the custom XML modal window safely

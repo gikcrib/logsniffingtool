@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
     // ✅ Populate the fileSelect dropdown on page load
-    populateFileSelect();
+    // populateFileSelect();
 	
 	// ✅ Set initial state of fileSelect on page load
 	if (document.querySelector('input[name="searchMode"]:checked').value === 'all') {
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				// Get total files count
 				let totalFiles = 0;
 				try {
-					const fileCountResponse = await fetch('/api/list_log_files');
+					const fileCountResponse = await fetch('/list_logs');
 					if (fileCountResponse.ok) {
 						const fileData = await fileCountResponse.json();
 						totalFiles = (searchMode === 'all') 
@@ -305,7 +305,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // ✅ Function to dynamically populate fileSelect dropdown
 async function populateFileSelect() {
 	try {
-		const response = await fetch('/api/list_log_files');
+		const response = await fetch('/list_logs');
 		const data = await response.json();
 		console.log('Available log files (before sort):', data.log_files);
 		const fileSelect = document.getElementById('fileSelect');

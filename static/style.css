@@ -596,6 +596,7 @@ pre, .xml-viewer {
   color: white;
   border: none;
   padding: 10px 18px;
+  margin: 10px 5px;
   font-size: 14px;
   border-radius: 6px;
   cursor: pointer;
@@ -604,6 +605,23 @@ pre, .xml-viewer {
 
 .custom-xml-close-btn:hover {
   background-color: #ff1c1c;
+}
+
+/* Copy button */
+.custom-xml-copy-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  margin: 10px 5px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  float: right;
+}
+
+.custom-xml-copy-btn:hover {
+  background-color: #3e8e41;
 }
 
 /* Modal title */
@@ -825,6 +843,7 @@ pre, .xml-viewer {
   --border-color: #555;
   --table-header: #2a2a2a;
   --table-alt-row: #2c2c2c;
+  --tab-content: #1e1e1e;
 }
 
 /* 🔄 Refresh Button — match styling with theme button */
@@ -846,54 +865,6 @@ pre, .xml-viewer {
   transform: scale(1.15);
 }
 
-/* =========================== GLOBAL Styling - END =========================== */
-
-/* =========================== Summary of Errors Found Section - START =========================== */ 
-/* =========================== Summary of Errors Found Section - END =========================== */
- 
-/* =========================== Services SOAP XML RQ/RS Section - START =========================== */ 
-
-/*
-.rqrs-table-container {
-  background: var(--table-alt-row);
-  border: 1px solid var(--border-color);
-  border-radius: 12px; 
-  padding: 10px;
-  margin-bottom: 1em;
-  font-size: 14px;
-  line-height: 1.6;
-  overflow: hidden;
-
-.rqrs-table-container table {
-  width: 100%;
-  border-collapse: collapse;
-  border-radius: 8px;
-  overflow: hidden; 
-}
-
-.rqrs-table-container th,
-.rqrs-table-container td {
-  padding: 8px;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.rqrs-table-container th {
-  background-color: var(--table-header-bg);
-  font-weight: bold;
-}
-
-.rqrs-table-container tr:nth-child(even) {
-  background-color: var(--table-alt-row);
-}
-
-.rqrs-table-container tr:hover {
-  background-color: var(--table-hover-bg);
-}*/
-
-/* =========================== Services SOAP XML RQ/RS Section - END =========================== */ 
-
-/* =========================== Search Tools Section - START =========================== */ 
 /* Seacrh Table MAIN Container */
 .search-filter-row {
   display: flex;

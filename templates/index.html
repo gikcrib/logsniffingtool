@@ -255,7 +255,38 @@
 				</div>
         </div> <!-- End of tabs -->
 
-        <!-- All modal dialogs remain here (unchanged) -->
+        <!-- JavaScript Files Section-->
+		
+		 <!-- JavaScript Script for the tabular page -->
+         <script>
+            document.addEventListener('DOMContentLoaded', function() {
+               const tabButtons = document.querySelectorAll('.tab-button');
+               const tabContents = document.querySelectorAll('.tab-content');
+               
+               tabButtons.forEach(button => {
+                  button.addEventListener('click', () => {
+                     // Remove active class from all buttons and contents
+                     tabButtons.forEach(btn => btn.classList.remove('active'));
+                     tabContents.forEach(content => content.classList.remove('active'));
+                     
+                     // Add active class to clicked button and corresponding content
+                     button.classList.add('active');
+                     const tabId = button.getAttribute('data-tab');
+                     document.getElementById(tabId).classList.add('active');
+                  });
+               });
+            });
+         </script>
+         	<!-- 🔗 Link to Search Tool Frontend JS -->
+			<script src="./js/searchToolFrontEnd.js"></script>
+			
+			<!-- 🔍 Link to ViewLog Frontend JS -->
+			<script src="./js/viewrawlogs.js"></script>
+
+			<!-- 🔗 Link to MAIN Frontend JS -->
+			<script src="./js/mainFrontEnd.js"></script>
+
+        <!-- All modal dialogs remain here -->
 
 			<!-- 🔍 Modal overlay while analyzing -->
 			<div id="analysisOverlay" class="modal-overlay" style="display: none;">
@@ -293,14 +324,6 @@
 				<button id="closeBtn">❌ Close</button>
 			  </div>
 			</div>
-					
-			<!-- 🔗 Link to Search Tool Frontend JS -->
-			<script src="./js/searchToolFrontEnd.js"></script>
-			
-			<!-- 🔍 Search Tools Section END -->
-
-			<!-- 🔗 Link to MAIN Frontend JS -->
-			<script src="./js/mainFrontEnd.js"></script>
 
 		  <!-- SCP Modal Overlay window (START) -->
 		 <div id="downloadModal" class="modal-overlay" style="display:none;" data-state="idle">
@@ -401,17 +424,19 @@
 		  </div>
 		</div>
 
-		<!-- ✅ Custom XML Modal (new version with isolated styles) -->
+		<!-- ✅ XML Modal Window -->
 		<div id="customXmlModal" class="custom-xml-modal" style="display: none;">
 		  <div class="custom-xml-container">
-			<!-- 🧾 Optional: Title -->
-			<h3 id="customModalTitle" class="custom-xml-title">XML Viewer</h3>
+		    <!-- 🧾 Optional: Title -->
+		    <h3 id="customModalTitle" class="custom-xml-title">XML Viewer</h3>
 
-			<!-- 📄 Where the pretty-printed XML is shown -->
-			<pre id="xmlContent" class="custom-xml-viewer"></pre>
+		    <!-- 📄 Where the pretty-printed XML is shown -->
+		    <pre id="xmlContent" class="custom-xml-viewer"></pre>
 
-			<!-- ❌ Close Button -->
-			<button class="custom-xml-close-btn" onclick="closeXmlModal()">Close</button>
+		    <!-- ❌ Close Button -->
+		    <button class="custom-xml-close-btn" onclick="closeXmlModal()">❌ Close</button>
+		    <!-- 📋 New Copy Button -->
+		    <button class="custom-xml-copy-btn" onclick="copyXmlContent()">📋 Copy</button>
 		  </div>
 		</div>
 
@@ -450,33 +475,6 @@
 		  </div>
 		</div>
 
-        <!-- Include all other modals here (unchanged) -->
-
-        <!-- JavaScript Files -->
-        <script src="./js/mainFrontEnd.js"></script>
-        <script src="./js/searchToolFrontEnd.js"></script>
-		<script src="./js/viewrawlogs.js"></script>
-		
-		 <!-- JavaScript Script for the tabular page -->
-         <script>
-            document.addEventListener('DOMContentLoaded', function() {
-               const tabButtons = document.querySelectorAll('.tab-button');
-               const tabContents = document.querySelectorAll('.tab-content');
-               
-               tabButtons.forEach(button => {
-                  button.addEventListener('click', () => {
-                     // Remove active class from all buttons and contents
-                     tabButtons.forEach(btn => btn.classList.remove('active'));
-                     tabContents.forEach(content => content.classList.remove('active'));
-                     
-                     // Add active class to clicked button and corresponding content
-                     button.classList.add('active');
-                     const tabId = button.getAttribute('data-tab');
-                     document.getElementById(tabId).classList.add('active');
-                  });
-               });
-            });
-         </script>
     </div>
 </body>
 </html>
