@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
     // ✅ Populate the fileSelect dropdown on page load
-    // populateFileSelect();
+    populateFileSelect();
 	
 	// ✅ Set initial state of fileSelect on page load
 	if (document.querySelector('input[name="searchMode"]:checked').value === 'all') {
@@ -85,118 +85,158 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 		// 🌊 Method 2: Streaming (with progress bar)
 		else {
-			try {
-				// Get total files count
-				let totalFiles = 0;
-				try {
-					const fileCountResponse = await fetch('/list_logs');
-					if (fileCountResponse.ok) {
-						const fileData = await fileCountResponse.json();
-						totalFiles = (searchMode === 'all') 
-							? fileData.log_files.length 
-							: 1;
-					}
-				} catch (error) {
-					console.error('File count error:', error);
-				}
+		    try {
+		        // Debug log - show we're starting the search
+		        console.log('[DEBUG] Starting streaming search with mode:', searchMode);
+		        
+		        // Set default file count first (safe fallback)
+		        let totalFiles = (searchMode === 'all') ? 100 : 1;
+		        console.log('[DEBUG] Default totalFiles set to:', totalFiles);
 
-				// Initialize progress
-				updateProgressBar(0, totalFiles, 'Starting search...');
+		        // Try to get actual file count from server
+		        try {
+		            console.log('[DEBUG] Making request to /list_logs...');
+		            const fileCountResponse = await fetch('/list_logs');
+		            
+		            // Debug log - show raw response
+		            console.log('[DEBUG] Raw response status:', fileCountResponse.status, 
+		                       'ok:', fileCountResponse.ok);
+		            
+		            if (fileCountResponse.ok) {
+		                const fileData = await fileCountResponse.json();
+		                console.log('[DEBUG] Server response data:', fileData);
+		                
+		                // Check multiple possible response formats
+		                const filesArray = fileData?.logs || fileData?.log_files || [];
+		                console.log('[DEBUG] Found files array:', filesArray);
+		                
+		                if (filesArray.length > 0) {
+		                    totalFiles = (searchMode === 'all') ? filesArray.length : 1;
+		                    console.log('[DEBUG] Updated totalFiles to:', totalFiles);
+		                } else {
+		                    console.warn('[WARN] Empty files array received, keeping default');
+		                }
+		            } else {
+		                console.warn('[WARN] /list_logs request failed, keeping default file count');
+		            }
+		        } catch (error) {
+		            console.error('[ERROR] File count request failed:', error);
+		            // We'll keep the default value set earlier
+		        }
 
-				const response = await fetch('/api/search_logs_stream', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						search_text: searchText,
-						search_mode: searchMode,
-						target_file: targetFile
-					})
-				});
+		        // Debug log - show final file count being used
+		        console.log('[DEBUG] Proceeding with totalFiles:', totalFiles);
+		        
+		        // Initialize progress (now with safe totalFiles)
+		        updateProgressBar(0, totalFiles, 'Starting search...');
 
-				if (!response.ok) throw new Error("Streaming failed");
+		        const response = await fetch('/api/search_logs_stream', {
+		            method: 'POST',
+		            headers: { 'Content-Type': 'application/json' },
+		            body: JSON.stringify({
+		                search_text: searchText,
+		                search_mode: searchMode,
+		                target_file: targetFile
+		            })
+		        });
 
-				const reader = response.body.getReader();
-				const decoder = new TextDecoder();
-				let buffer = '';
-				let filesScanned = 0;
-				let currentFile = '';
+		        if (!response.ok) throw new Error("Streaming failed");
 
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) {
-						// 100% COMPLETION FIX (Step 2)
-						updateProgressBar(totalFiles, totalFiles, 'Finalizing results...');
-						break;
-					}
+		        // ▼▼▼ REPLACED STREAM HANDLING CODE STARTS HERE ▼▼▼
+		        const reader = response.body.getReader();
+		        const decoder = new TextDecoder();
+		        let buffer = '';
+		        let filesScanned = 0;
+		        let currentFile = '';
+		        let searchComplete = false; // NEW: Track completion status
 
-					buffer += decoder.decode(value, { stream: true });
-					const parts = buffer.split('\n\n');
-					
-					for (let i = 0; i < parts.length - 1; i++) {
-						const event = parts[i].trim();
-						if (!event) continue;
+		        while (!searchComplete) {  // CHANGED: Now checks completion flag
+		            const { done, value } = await reader.read();
+		            if (done) {
+		                console.log('[DEBUG] Stream reader completed');
+		                break;
+		            }
 
-						if (event.startsWith('data: {')) {
-							const data = JSON.parse(event.replace('data: ', ''));
+		            buffer += decoder.decode(value, { stream: true });
+		            const parts = buffer.split('\n\n');
+		            
+		            for (let i = 0; i < parts.length - 1; i++) {
+		                const event = parts[i].trim();
+		                if (!event) continue;
 
-							// Progress updates
-							if (data.files_scanned !== undefined) {
-								filesScanned = data.files_scanned;
-								updateProgressBar(filesScanned, totalFiles, currentFile);
-							}
-							
-							if (data.current_file) {
-								currentFile = data.current_file;
-								updateProgressBar(filesScanned, totalFiles, currentFile);
-							}
-							
-							// Normal result
-							if (data.log_file) {
-								addSingleResultToTable(data);
-							}
-							
-							// Search complete
-							else if (data.status === "complete") {
-								// SUMMARY REPORT FIX (Step 3)
-								const elapsed = ((Date.now() - searchStartTime) / 1000).toFixed(2);
-								document.getElementById('searchSummary').textContent =
-									`Files Scanned: ${data.files_scanned} | ` +
-									`Files with Matches: ${data.file_matches} | ` +
-									`Total Occurrences: ${data.total_occurrences} | ` +
-									`Time: ${elapsed}s`;
-								
-								// Close modal after slight delay
-								setTimeout(() => {
-									progressModal.style.display = 'none';
-								}, 500);
-							}
-							
-							// Error handling
-							else if (data.error) {
-								throw new Error(`${data.error} (Code: ${data.code || 'unknown'})`);
-							}
-						}
-					}
-					buffer = parts[parts.length - 1];
-				}
-			} catch (error) {
-				// SUMMARY REPORT FIX (Step 3)
-				document.getElementById('searchSummary').textContent = "Search failed";
-				updateProgressBar(0, 0, `Failed: ${error.message}`);
-				
-				setTimeout(() => {
-					progressModal.style.display = 'none';
-				}, 1500);
-				
-				console.error("Search error:", error);
-			}
+		                try {
+		                    if (event.startsWith('data: {')) {
+		                        const data = JSON.parse(event.replace('data: ', ''));
+		                        console.log('[DEBUG] Stream event:', data);
+
+		                        // Handle progress updates
+		                        if (data.files_scanned !== undefined) {
+		                            filesScanned = data.files_scanned;
+		                            updateProgressBar(filesScanned, totalFiles, currentFile);
+		                        }
+		                        
+		                        if (data.current_file) {
+		                            currentFile = data.current_file;
+		                            updateProgressBar(filesScanned, totalFiles, currentFile);
+		                        }
+		                        
+		                        // Handle results
+		                        if (data.log_file) {
+		                            addSingleResultToTable(data);
+		                        }
+		                        
+		                        // Handle completion - NEW IMPROVED VERSION
+		                        if (data.status === "complete") {
+		                            console.log('[DEBUG] Received completion event');
+		                            const elapsed = ((Date.now() - searchStartTime) / 1000).toFixed(2);
+		                            document.getElementById('searchSummary').textContent =
+		                                `Files Scanned: ${data.files_scanned} | ` +
+		                                `Files with Matches: ${data.file_matches} | ` +
+		                                `Total Occurrences: ${data.total_occurrences} | ` +
+		                                `Time: ${elapsed}s`;
+		                            
+		                            // NEW: Set completion flag and close modal
+		                            searchComplete = true;
+		                            progressModal.style.display = 'none';
+		                            break; // Exit the for loop
+		                        }
+		                    }
+		                } catch (e) {
+		                    console.error('[ERROR] Parsing stream event failed:', e, 'Event:', event);
+		                }
+		            }
+		            buffer = parts[parts.length - 1];
+		            
+		            // NEW: Exit while loop if search is complete
+		            if (searchComplete) break;
+		        }
+		        
+		        // Final cleanup (NEW)
+		        if (!searchComplete) {
+		            console.log('[DEBUG] Stream ended without completion event');
+		            progressModal.style.display = 'none';
+		        }
+		        // ▲▲▲ REPLACED STREAM HANDLING CODE ENDS HERE ▲▲▲
+		        
+		    } catch (error) {
+		        console.error('[ERROR] Search failed completely:', error);
+		        document.getElementById('searchSummary').textContent = "Search failed";
+		        updateProgressBar(0, 0, `Failed: ${error.message}`);
+		        
+		        setTimeout(() => {
+		            progressModal.style.display = 'none';
+		        }, 1500);
+		    }
 		}
 	});
 
     // Abort button click
 	abortBtn.addEventListener('click', async () => {
 		console.log('Abort button clicked');
-		
+
+		document.getElementById('searchSummary').textContent = "Aborting search...";
+		progressModal.style.display = 'flex';	
+
 		// 🌟 NEW: Visual feedback (add these 3 lines)
 		const originalText = abortBtn.textContent; // Store original text
 		abortBtn.textContent = "⏳ Aborting...";   // Show loading state
@@ -207,9 +247,13 @@ document.addEventListener('DOMContentLoaded', function() {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' }
 			});
+			if (response.ok)  {
+				document.getElementById('searchSummary').textContent = "🔴 Search aborted...";
+				progressModal.style.display = 'flex';
+			}
 			if (!response.ok) throw new Error("Abort failed");
 			progressModal.style.display = 'none';
-			resultsTableBody.innerHTML = ''; // Clear partial results
+			resultsTableBody.innerHTML = '';
 			
 		} catch (error) {
 			console.error('Abort error:', error);
@@ -312,7 +356,7 @@ async function populateFileSelect() {
 		fileSelect.innerHTML = '<option value="">-- Select Target File --</option>';
 		
 		// ✅ Sort filenames alphabetically, case-insensitive
-		const sortedFiles = data.log_files.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+		const sortedFiles = data.logs.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
 		sortedFiles.forEach(file => {
 			const option = document.createElement('option');

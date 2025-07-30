@@ -968,7 +968,7 @@ pre, .xml-viewer {
     padding: 8px 12px;
     background-color: #f5f5f5;
     border: 1px solid #ddd;
-	  border-left: 4px solid #3498db;
+    border-left: 4px solid #3498db;
     border-radius: 4px;
     font-family: monospace;
     text-align: left;
@@ -1175,7 +1175,7 @@ pre, .xml-viewer {
     word-wrap: break-word;
     margin: 0 0 15px 0;
     color: #333;
-	overflow-x: auto; /* For horizontal scrolling if needed */
+  overflow-x: auto; /* For horizontal scrolling if needed */
 }
 
 .searchtool-modal-content {
@@ -1313,7 +1313,7 @@ pre, .xml-viewer {
   box-shadow: 0 4px 8px rgba(74, 111, 165, 0.4);
 }
 
-..download-btn:active,
+.download-btn:active,
 .reviewlogs-btn:active,
 .searchtoolfilters-button:active,
 .logview-refresh-btn:active,

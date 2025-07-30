@@ -1078,13 +1078,16 @@ function closeRqrsXmlModal() {
   document.getElementById("rqrsXmlModal").style.display = "none";
 }
 
-// ✅ Fetches XML from backend and opens the custom-styled modal
+// ✅ Fetches XML from backend using actual line numbers
 async function fetchAndDisplayXMLForModal(log, index, tag) {
-  console.log("📨 Requesting XML content for:", { log, index, tag });
+  // Get the actual line number from your cached data
+  const lineNumber = window.rqrsCache[index].line;
+  console.log("📨 Requesting XML content for:", { log, lineNumber, tag });
   showLoadingXmlModal();
 
   try {
-    const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&index=${index}&tag=${encodeURIComponent(tag)}`);
+    // Changed from 'index' to 'line_number' parameter
+    const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&line_number=${lineNumber}&tag=${encodeURIComponent(tag)}`);
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -1106,7 +1109,8 @@ async function fetchAndDisplayXMLForModal(log, index, tag) {
       throw new Error("Modal elements not found");
     }
 
-    title.textContent = `📄 ${tag}`;
+    // Update title to show line number
+    title.textContent = `📄 ${tag} (Line ${lineNumber})`;
     content.textContent = data.pretty_xml;
     modal.style.display = "flex";
     content.style.display = "block";
@@ -1116,10 +1120,21 @@ async function fetchAndDisplayXMLForModal(log, index, tag) {
       hljs.highlightElement(content);
     }
 
+    // Add line number info to modal footer
+    const footer = modal.querySelector(".custom-modal-footer");
+    if (footer) {
+      footer.innerHTML = `
+        <small class="text-muted">
+          Lines ${data.actual_start_line} to ${data.actual_end_line} | 
+          ${new Date().toLocaleString()}
+        </small>
+      `;
+    }
+
     console.log("✅ XML displayed in UI");
   } catch (err) {
     console.error("❌ Error displaying XML:", err);
-    showToast("❌ Failed to load XML content");
+    showToast(`❌ Failed to load XML from line ${lineNumber}`);
   } finally {
     hideLoadingXmlModal(500);
   }

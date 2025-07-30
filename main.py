@@ -26,8 +26,8 @@ class Config:
     LOG_OUTPUT_DIR = "./applog"
     LOG_DIR = "./logs"
     MAX_CACHE_SIZE = 10
-    PRELOAD_ENABLED = True
-    PRELOAD_LARGE_FILES = True
+    PRELOAD_ENABLED = False
+    PRELOAD_LARGE_FILES = False
     EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.tar.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
     CRITICAL_ENDPOINTS = [
         '/list_logs',
@@ -180,6 +180,7 @@ def get_file_metadata(filepath: Path) -> Dict[str, Any]:
 
 def extract_thread_id(line: str) -> str:
     """Extract thread ID from log line with multiple fallback patterns"""
+    # First try the specific thread patterns
     match = Patterns.THREAD.search(line)
     if match:
         return match.group(1)
@@ -188,14 +189,13 @@ def extract_thread_id(line: str) -> str:
     if match:
         return match.group(1)
     
-    match = Patterns.BRACKETED.search(line)
-    if match:
-        return match.group(1)
-    
+    # Then try the thread ID pattern (digits_underscore_digits)
     match = Patterns.THREAD_FALLBACK.search(line)
     if match:
         return match.group(0)
     
+    # Only if none of the above match, return UNKNOWN
+    # Don't fall back to BRACKETED as it might catch wrong things
     return "UNKNOWN"
 
 def extract_service(line: str) -> str:
@@ -348,88 +348,52 @@ progress_tracker = ProgressTracker()
 ################################
 # Core Functions
 ################################
+
 async def parse_log_file(log: str) -> Dict[str, Any]:
-    """Parse log file to extract RQ/RS entries"""
     if (cached := await LOG_CACHE.get(log)) is not None:
-        logger.info(f"Cache HIT for {log}")
         return cached
 
     filepath = os.path.join(Config.LOG_DIR, log)
-    if not os.path.exists(filepath):
-        raise HTTPException(404, detail="File not found")
-
-    start_time = time.time()
     entries = []
-    line_count = 0
-    previous_line = ""
-    last_report_time = start_time
-    chunk_size = 1024 * 1024  # 1MB chunks
+    line_number = 0
+    last_timestamp = ""
 
     try:
         async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            while True:
-                chunk = await f.read(chunk_size)
-                if not chunk:
-                    break
-                
-                for line in chunk.splitlines():
-                    line_count += 1
-                    stripped = line.strip()
-                    
-                    if not stripped or line_count == 1:
-                        continue
-                        
-                    if "<" in stripped:
-                        if entry := extract_xml_info(stripped, previous_line, line_count):
-                            entries.append(entry)
-                    
-                    previous_line = stripped
-                    
-                    # Progress reporting (throttled)
-                    current_time = time.time()
-                    if current_time - last_report_time > 5:
-                        logger.info(f"🔵 Parsing XML. Processed {line_count:,} lines...")
-                        last_report_time = current_time
-                        await asyncio.sleep(0)
+            async for raw_line in f:
+                line_number += 1
+                stripped = raw_line.strip()
 
-        logger.info(f"Finished {line_count:,} lines with {len(entries):,} entries in {time.time()-start_time:.2f}s")
-        
-        result = {
-            "metadata": {
-                "lines_processed": line_count,
-                "entries_found": len(entries),
-                "processing_time": round(time.time() - start_time, 2)
-            },
-            "rqrs": entries
+                if not stripped:
+                    continue
+
+                # Check for timestamp
+                if Patterns.TIMESTAMP.match(stripped):
+                    last_timestamp = stripped
+                    continue
+
+                # Check for XML
+                if match := Patterns.RQRS.search(stripped):
+                    source_line = last_timestamp if last_timestamp else stripped
+                    service_name = extract_service(source_line)
+                    entries.append({
+                        "line": line_number,  # Frontend expects "line"
+                        "thread": extract_thread_id(source_line),  # "thread" not "thread_id"
+                        "tag": match.group(1),  # Frontend expects "tag" not "service"
+                        "raw": stripped,  # Required for XML modal
+                        "has_issue": bool(Patterns.XML_ERRORS.search(stripped))  # For warning icon
+                    })
+                    last_timestamp = ""
+
+        logger.info(f"✅ Final Results: Parsed {line_number} lines. Found {len(entries)} entries")
+        # Structure exactly matches frontend expectations
+        return {
+            "rqrs": entries  # Frontend looks for "rqrs" array
         }
-        
-        await LOG_CACHE.set(log, result)
-        return result
 
     except Exception as e:
-        logger.error(f"Error processing {log}: {str(e)}")
-        raise HTTPException(500, detail="Internal server error")
-
-def extract_xml_info(stripped_line: str, previous_line: str, line_number: int) -> Optional[Dict[str, Any]]:
-    """Extract XML info from log line"""
-    if match := Patterns.RQRS.search(stripped_line):
-        is_inline_xml = bool(Patterns.DATE.match(stripped_line))
-        source_line = stripped_line if is_inline_xml else previous_line
-        
-        thread_match = (Patterns.THREAD.search(source_line) or Patterns.ALT_THREAD.search(source_line))
-        thread_id = thread_match.group(1) if thread_match else None
-        if not thread_id:
-            bracketed = Patterns.BRACKETED.findall(source_line)
-            thread_id = next((x for x in bracketed if Patterns.THREAD_FALLBACK.match(x)), "UNKNOWN")
-        
-        return {
-            "line": line_number,
-            "thread": thread_id,
-            "tag": match.group(1),
-            "raw": stripped_line[:512],
-            "has_issue": bool(Patterns.XML_ERRORS.search(stripped_line))
-        }
-    return None
+        logger.error(f"Parse error: {str(e)}")
+        raise HTTPException(500, detail="Log processing error")
 
 async def async_preload_logs():
     """Optimized log preloading that processes all files regardless of size"""
@@ -1120,6 +1084,7 @@ async def analyze_logs(request: Request):
         traceback.print_exc()
         return JSONResponse({"error": "Internal Server Error"}, status_code=500)
 
+
 @app.get("/get_rqrs")
 async def get_rqrs(log: str):
     """Endpoint that prioritizes user requests"""
@@ -1222,109 +1187,87 @@ async def get_log_context(log: str, line: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/get_rqrs_content")
-def get_rqrs_content(log: str, index: int, tag: str):
+def get_rqrs_content(log: str, line_number: int, tag: str):
     log_path = os.path.join(Config.LOG_DIR, log)
     if not os.path.exists(log_path):
-        return Response("Log file not found", status_code=404)
+        return JSONResponse({"error": "Log file not found"}, status_code=404)
 
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = [line.rstrip() for line in f.readlines()]
+            # Find the exact line requested
+            for current_line_no, line in enumerate(f, 1):
+                if current_line_no == line_number:
+                    opening_tag = f"<{tag}"
+                    tag_pos = line.find(opening_tag)
+                    
+                    if tag_pos < 0:
+                        return JSONResponse(
+                            {"error": f"Opening tag {opening_tag} not found at line {line_number}"},
+                            status_code=400
+                        )
+                    
+                    # Start collecting XML
+                    xml_lines = [line[tag_pos:]]
+                    start_line = current_line_no
+                    
+                    # Find closing tag
+                    closing_tag = f"</{tag}>"
+                    while closing_tag not in xml_lines[-1]:
+                        next_line = next(f, None)
+                        if next_line is None:
+                            return JSONResponse(
+                                {"error": f"Closing tag {closing_tag} not found"},
+                                status_code=400
+                            )
+                        xml_lines.append(next_line)
+                    
+                    full_xml = "".join(xml_lines)
+                    end_line = start_line + len(xml_lines) - 1
+                    
+                    # Parse and pretty print (keeping your original logic)
+                    try:
+                        parser = ET.XMLParser(encoding="utf-8")
+                        root = ET.fromstring(full_xml, parser=parser)
+                        
+                        # Namespace handling
+                        namespaces = {k: v for k, v in root.attrib.items() if k.startswith('xmlns')}
+                        for prefix, uri in namespaces.items():
+                            ET.register_namespace(prefix[6:] if prefix.startswith('xmlns:') else '', uri)
+                        
+                        ET.indent(root, space="  ", level=0)
+                        pretty_xml = ET.tostring(root, encoding="unicode", method="xml")
+                        
+                        if not pretty_xml.startswith("<?xml"):
+                            pretty_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + pretty_xml
 
-        if index < 0 or index >= len(lines):
-            return Response("Invalid index", status_code=400)
+                        return JSONResponse({
+                            "pretty_xml": pretty_xml,
+                            "raw_xml": full_xml,
+                            "actual_start_line": start_line,
+                            "actual_end_line": end_line,
+                            "status": "success",
+                            "namespaces": namespaces
+                        })
+                        
+                    except ET.ParseError as e:
+                        logger.error(f"XML parse error at line {start_line}: {str(e)}")
+                        return JSONResponse({
+                            "error": f"XML parsing failed: {str(e)}",
+                            "raw_xml": full_xml,
+                            "status": "error"
+                        }, status_code=400)
 
-        # Debug: Log the original line
-        logger.debug(f"Original line {index + 1}: {lines[index]}")
-
-        # Find XML content
-        xml_content = None
-        current_line = index
-        opening_tag = f"<{tag}"
-        
-        while current_line < len(lines):
-            line = lines[current_line]
-            tag_pos = line.find(opening_tag)
-            if tag_pos >= 0:
-                xml_content = line[tag_pos:]
-                break
-            current_line += 1
-        
-        if xml_content is None:
-            return Response(f"Could not find opening tag {opening_tag}", status_code=400)
-
-        # Collect full XML
-        closing_tag = f"</{tag}>"
-        xml_lines = [xml_content]
-        found_closing = closing_tag in xml_content
-        
-        while not found_closing and current_line < len(lines):
-            current_line += 1
-            line = lines[current_line]
-            xml_lines.append(line)
-            if closing_tag in line:
-                found_closing = True
-                closing_pos = line.find(closing_tag) + len(closing_tag)
-                xml_lines[-1] = line[:closing_pos]
-
-        if not found_closing:
-            return Response(f"Could not find closing tag {closing_tag}", status_code=400)
-
-        full_xml = ''.join(xml_lines)
-        logger.debug(f"Raw extracted XML:\n{full_xml}")
-
-        try:
-            # Parse with namespace preservation
-            parser = ET.XMLParser(encoding="utf-8")
-            root = ET.fromstring(full_xml, parser=parser)
-            
-            # Debug: Log namespaces found
-            namespaces = {k: v for k, v in root.attrib.items() if k.startswith('xmlns')}
-            logger.debug(f"Detected namespaces: {namespaces}")
-            
-            # Register namespaces to keep prefixes
-            for prefix, uri in namespaces.items():
-                if prefix.startswith('xmlns:'):
-                    ET.register_namespace(prefix[6:], uri)
-                else:
-                    ET.register_namespace('', uri)
-            
-            # Pretty print with preserved namespaces
-            ET.indent(root, space="  ", level=0)
-            pretty_xml = ET.tostring(root, encoding="unicode", method="xml")
-            
-            # Ensure XML declaration
-            if not pretty_xml.startswith("<?xml"):
-                pretty_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + pretty_xml
-
-            logger.debug(f"Final pretty XML:\n{pretty_xml}")
-            
-            return JSONResponse({
-                "pretty_xml": pretty_xml,
-                "raw_xml": full_xml,
-                "actual_start_line": index + 1,
-                "actual_end_line": current_line + 1,
-                "status": "success",
-                "debug": {
-                    "namespaces": namespaces,
-                    "line_count": len(xml_lines)
-                }
-            })
-            
-        except ET.ParseError as e:
-            logger.error(f"XML parsing failed: {str(e)}\nXML content:\n{full_xml}")
-            return JSONResponse({
-                "error": f"XML parsing failed: {str(e)}",
-                "raw_xml": full_xml,
-                "status": "error"
-            }, status_code=400)
+            return JSONResponse(
+                {"error": f"Line {line_number} not found in file"},
+                status_code=404
+            )
 
     except Exception as e:
         logger.error(f"File processing failed: {str(e)}", exc_info=True)
-        return JSONResponse({
-            "error": f"File processing failed: {str(e)}",
-            "status": "error"
-        }, status_code=500)
+        return JSONResponse(
+            {"error": f"File processing failed: {str(e)}"},
+            status_code=500
+        )
 
 ################################
 # Search API Endpoints
@@ -1428,24 +1371,28 @@ async def search_logs(req: SearchRequest):
 @app.post("/api/search_logs_stream")
 async def search_logs_stream(req: SearchRequest):
     """Streaming search endpoint optimized for large log files"""
-    GlobalState.abort_event.clear()
+    GlobalState.abort_event.clear()  # Clear any previous abort state
     
     async def generate():
-        search_text = req.search_text
-        search_mode = req.search_mode
-        target_file = req.target_file
-        start_time = time.time()
-        files_with_matches = set()
-        total_files_scanned = 0
-        total_occurrences = 0
-        
-        start_time_str = time.strftime("%H:%M:%S", time.localtime(start_time))
-        print(f"\n[Search Started] {start_time_str} | Pattern: '{search_text}' | Mode: {search_mode}")
-
         try:
+            search_text = req.search_text
+            search_mode = req.search_mode
+            target_file = req.target_file
+            start_time = time.time()
+            files_with_matches = set()
+            total_files_scanned = 0
+            total_occurrences = 0
+            
+            start_time_str = time.strftime("%H:%M:%S", time.localtime(start_time))
+            print(f"\n[Search Started] {start_time_str} | Pattern: '{search_text}' | Mode: {search_mode}")
+
+            # Get files to search
             if search_mode == 'all':
-                files_to_search = [f for f in os.listdir(Config.LOG_DIR) 
-                                 if f.endswith('.log') and not is_compressed_file(f)]
+                files_to_search = [
+                    f for f in os.listdir(Config.LOG_DIR)
+                    if os.path.isfile(os.path.join(Config.LOG_DIR, f)) and
+                    not any(f.lower().endswith(ext) for ext in Config.EXCLUDED_EXTENSIONS)
+                ]
             elif search_mode == 'targeted' and target_file:
                 files_to_search = [target_file]
             else:
@@ -1454,13 +1401,17 @@ async def search_logs_stream(req: SearchRequest):
                 yield 'data: {"error": "Invalid search mode or missing target file", "code": 400}\n\n'
                 return
 
+            # Process each file
             for fname in files_to_search:
-                yield f'data: {{"current_file": "{fname}"}}\n\n'
                 if GlobalState.abort_event.is_set():
                     print(f"[Search Aborted] User requested abort")
                     yield 'data: {"status": "aborted", "code": 499}\n\n'
-                    break
+                    GlobalState.abort_event.clear()  # Clear the abort flag
+                    return  # Exit completely
 
+                # Send current file being processed
+                yield f'data: {{"current_file": "{fname}"}}\n\n'
+                
                 fpath = os.path.join(Config.LOG_DIR, fname)
                 if not os.path.isfile(fpath):
                     continue
@@ -1468,64 +1419,67 @@ async def search_logs_stream(req: SearchRequest):
                 total_files_scanned += 1
                 file_has_matches = False  
                 section_buffer = []
-                last_timestamp_idx = -1
                 current_thread = "UNKNOWN"
                 current_service = "UNKNOWN"
 
-                with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-                    for line_idx, line in enumerate(f):
-                        line = line.rstrip('\n')
-                        
-                        if line_idx % 100 == 0:
-                            await asyncio.sleep(0)  
-                        
-                        if Patterns.TIMESTAMP.match(line):
-                            last_timestamp_idx = line_idx
-                            section_buffer = [line]
-                            current_thread = extract_thread_id(line)
-                            current_service = extract_service(line)
-                        else:
-                            section_buffer.append(line)
-
-                        if re.search(re.escape(search_text), line, re.IGNORECASE):
-                            if not file_has_matches:
-                                files_with_matches.add(fname)
-                                file_has_matches = True
-                                print(f"[Match Found] File: {fname}")
-
-                            total_occurrences += 1
-                            snippet = line if Patterns.TIMESTAMP.match(line) else '\n'.join(section_buffer)
+                try:
+                    with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                        for line_idx, line in enumerate(f):
+                            # Check abort flag more frequently
+                            if line_idx % 10 == 0 and GlobalState.abort_event.is_set():
+                                logger.info(f"🔴 [Search Aborted] During file processing")
+                                yield 'data: {"status": "aborted", "code": 499}\n\n'
+                                GlobalState.abort_event.clear()
+                                return
                             
-                            data = {
-                                "log_file": fname,
-                                "line_number": line_idx + 1,
-                                "thread_id": current_thread,
-                                "service": current_service,
-                                "snippet": snippet
-                            }
-                            yield f'data: {json.dumps(data)}\n\n'
+                            line = line.rstrip('\n')
                             
-            yield f'data: {{"files_scanned": {total_files_scanned}}}\n\n'
-            elapsed = time.time() - start_time
-            print(f"\n[Search Completed] {time.strftime('%H:%M:%S', time.localtime())}")
-            print(f"  Files scanned: {total_files_scanned}")
-            print(f"  Files with matches: {len(files_with_matches)}")
-            print(f"  Total occurrences: {total_occurrences}")
-            print(f"  Elapsed time: {elapsed:.2f} seconds")
+                            if Patterns.TIMESTAMP.match(line):
+                                section_buffer = [line]
+                                current_thread = extract_thread_id(line)
+                                current_service = extract_service(line)
+                            else:
+                                section_buffer.append(line)
 
-            data = {
-                "status": "complete",
-                "code": 200,
-                "files_scanned": total_files_scanned,
-                "file_matches": len(files_with_matches),
-                "total_occurrences": total_occurrences,
-                "elapsed_time": round(elapsed, 2)
-            }
-            yield f'data: {json.dumps(data)}\n\n'      
+                            if re.search(re.escape(search_text), line, re.IGNORECASE):
+                                if not file_has_matches:
+                                    files_with_matches.add(fname)
+                                    file_has_matches = True
+                                    print(f"[Match Found] File: {fname}")
+
+                                total_occurrences += 1
+                                snippet = line if Patterns.TIMESTAMP.match(line) else '\n'.join(section_buffer)
+                                
+                                data = {
+                                    "log_file": fname,
+                                    "line_number": line_idx + 1,
+                                    "thread_id": current_thread,
+                                    "service": current_service,
+                                    "snippet": snippet
+                                }
+                                yield f'data: {json.dumps(data)}\n\n'
+
+                except Exception as e:
+                    logger.error(f"🔴 [File Processing Error] {fname}: {str(e)}")
+                    continue
+
+            # Only send completion if not aborted
+            if not GlobalState.abort_event.is_set():
+                yield f'data: {{"files_scanned": {total_files_scanned}}}\n\n'
+                elapsed = time.time() - start_time
+                print(f"\n[Search Completed] {time.strftime('%H:%M:%S', time.localtime())}")
+                print(f"  Files scanned: {total_files_scanned}")
+                print(f"  Files with matches: {len(files_with_matches)}")
+                print(f"  Total occurrences: {total_occurrences}")
+                print(f"  Elapsed time: {elapsed:.2f} seconds")
+
+                yield f'data: {json.dumps({"status": "complete", "code": 200, "files_scanned": total_files_scanned, "file_matches": len(files_with_matches), "total_occurrences": total_occurrences, "elapsed_time": round(elapsed, 2)})}\n\n'
 
         except Exception as e:
             print(f"[Search Error] {str(e)}")
             yield 'data: {"error": "Search processing failed", "code": 500}\n\n'
+        finally:
+            GlobalState.abort_event.clear()  # Ensure flag is cleared when done
 
     return StreamingResponse(
         generate(),
@@ -1539,8 +1493,7 @@ async def search_logs_stream(req: SearchRequest):
 @app.post("/api/abort_search")
 async def abort_search():
     GlobalState.abort_event.set()
-    GlobalState.abort_event.clear()
-    return {"status": "abort signal sent and reset"}
+    return {"status": "abort signal sent"}
     
 @app.get("/api/debug_search_status")
 async def debug_search_status():
@@ -1647,6 +1600,7 @@ async def refresh_cache():
 ################################
 # View Logs API Endpoints
 ################################
+
 @app.get("/api/logs/stream")
 async def stream_log_file(filename: str):
     """Return complete log file content as JSON"""
@@ -1687,6 +1641,7 @@ async def stream_log_file(filename: str):
             status_code=500,
             detail=f"Error reading file: {str(e)}"
         )
+
 ################################
 # Monitoring Helper Functions
 ################################
