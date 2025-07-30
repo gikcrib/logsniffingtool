@@ -1600,47 +1600,55 @@ async def refresh_cache():
 ################################
 # View Logs API Endpoints
 ################################
-
 @app.get("/api/logs/stream")
 async def stream_log_file(filename: str):
-    """Return complete log file content as JSON"""
+    """Stream log file content as NDJSON"""
     file_path = Path(Config.LOG_DIR) / filename
     
     # Validate file exists and is accessible
     if not file_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="File not found"
-        )
+        raise HTTPException(status_code=404, detail="File not found")
     
     if is_compressed_file(filename):
-        raise HTTPException(
-            status_code=400,
-            detail="Compressed files are not supported"
-        )
+        raise HTTPException(status_code=400, detail="Compressed files are not supported")
 
-    try:
-        # Read all lines at once
+    async def generate():
+        total_lines = 0
+        chunk_size = 1000  # lines per chunk
+        chunk = []
+        
         async with aiofiles.open(file_path, mode='r', encoding='utf-8', errors='ignore') as f:
-            lines = await f.readlines()
-        
-        # Count total lines (more efficient than len(lines) for very large files)
-        line_count = sum(1 for _ in lines)
-        
-        return {
-            "filename": filename,
-            "size": file_path.stat().st_size,
-            "total_lines": line_count,
-            "lines": [line.strip() for line in lines],
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error reading file {filename}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error reading file: {str(e)}"
-        )
+            # First send metadata
+            yield json.dumps({
+                "filename": filename,
+                "size": file_path.stat().st_size,
+                "timestamp": datetime.now().isoformat(),
+                "type": "metadata"
+            }) + "\n\n"
+            
+            # Stream lines
+            async for line in f:
+                chunk.append(line.strip())
+                if len(chunk) >= chunk_size:
+                    total_lines += len(chunk)
+                    yield json.dumps({
+                        "lines": chunk,
+                        "total_lines": total_lines,
+                        "type": "chunk"
+                    }) + "\n\n"
+                    chunk = []
+            
+            # Send remaining lines
+            if chunk:
+                total_lines += len(chunk)
+                yield json.dumps({
+                    "lines": chunk,
+                    "total_lines": total_lines,
+                    "type": "chunk"
+                }) + "\n\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
 
 ################################
 # Monitoring Helper Functions
