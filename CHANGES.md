@@ -38,16 +38,18 @@
 
 ### ✅ Changes Applied:
 - ✅ `mainFrontEnd.js`:
-  - Added `resetMainMemoryState()` to clear RQRS/error summary cache and DOM when switching tabs.
+  - Added `resetMemoryState_MainFrontEnd()` to safely clean up RQRS and error summary UI state.
+  - Hooked tab switching logic to only call cleanup **when leaving other tabs**, preserving error/soap tab content.
 
 - ✅ `searchToolFrontEnd.js`:
-  - Added `resetSearchToolMemory()` to clean up search results, summary text, and streaming `EventSource`.
+  - Added `resetSearchToolMemory()` to clear search results, summary text, and streaming `EventSource`.
 
 - ✅ `viewrawlogs.js`:
-  - Added global function `resetRawLogsMemory()` outside the `LogViewer` class to clear log lines and reset UI.
-  - Fixed a **SyntaxError** caused by misplacing `function` inside a class block.
+  - Added global function `resetRawLogsMemory()` outside the class to clear log viewer memory.
+  - Fixed prior placement bug that caused a SyntaxError inside the class block.
 
 - ✅ `index.html`:
-  - Modified tab switch logic to safely call cleanup functions:
-    - `resetSearchToolMemory()` when leaving `Search Tools` tab
-    - `resetRawLogsMemory()` when leaving `Raw Logs` tab
+  - Hooked tab switching logic to call:
+    - `resetSearchToolMemory()` when leaving Search tab
+    - `resetRawLogsMemory()` when leaving Raw Logs tab
+
