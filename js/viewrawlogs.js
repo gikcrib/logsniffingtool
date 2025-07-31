@@ -528,16 +528,44 @@ class LogViewer {
         this.fileSelect.appendChild(header);
     }
 
-    copySelectedText() {
-        const selection = window.getSelection();
-        if (selection.toString().length > 0) {
-            navigator.clipboard.writeText(selection.toString())
-                .then(() => this.showToast('Text copied to clipboard'))
-                .catch(err => this.showModal('Error', 'Failed to copy text: ' + err));
-        } else {
-            this.showModal('Warning', 'Please select some text to copy first');
-        }
-    }
+	copySelectedText() {
+	    const selection = window.getSelection();
+	    if (!selection || selection.toString().length === 0) {
+	        this.showModal('Warning', 'Please select some text to copy first');
+	        return;
+	    }
+
+	    try {
+	        let logText = "";
+	        const range = selection.getRangeAt(0);
+	        const lineElements = this.logContainer.querySelectorAll('.logview-line');
+
+	        lineElements.forEach(line => {
+	            if (selection.containsNode(line, true)) {
+	                const lineContent = line.querySelector('.logview-line-content');
+	                if (lineContent) {
+	                    // Trim whitespace and add clean newline
+	                    const cleanLine = lineContent.textContent.trim();
+	                    if (cleanLine) {
+	                        if (logText) logText += "\n";
+	                        logText += cleanLine;
+	                    }
+	                }
+	            }
+	        });
+
+	        if (logText) {
+	            navigator.clipboard.writeText(logText)
+	                .then(() => this.showToast('✅ Log text copied to clipboard'))
+	                .catch(err => console.error('Copy failed:', err));
+	        } else {
+	            this.showModal('Warning', 'No log content selected');
+	        }
+	    } catch (error) {
+	        console.error('Copy error:', error);
+	        this.showModal('Error', 'Failed to copy text');
+	    }
+	}
 
     updateStatus(message) {
         this.statusBar.textContent = message;
