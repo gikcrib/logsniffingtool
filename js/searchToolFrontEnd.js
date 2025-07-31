@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
     // ✅ Populate the fileSelect dropdown on page load
-    populateFileSelect();
+    // populateFileSelect(); // OPTIONAL: Enable this if needed but will add overhead process upon page load
 	
 	// ✅ Set initial state of fileSelect on page load
 	if (document.querySelector('input[name="searchMode"]:checked').value === 'all') {
