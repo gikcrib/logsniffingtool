@@ -1,0 +1,10 @@
+/__pycache__/
+/logs/
+/temp/
+/applog/
+/bak/
+.gitignore.bak
+*.bak
+*.txt
+*.Identifier
+*.pid

@@ -15,7 +15,7 @@ This tool is designed for non-technical users to quickly inspect logs from local
 
 ---
 
-## 📁 Folder Structure (Updated)
+## 📁 Folder Structure
 
 ```
 jbossQuickLogScanner/

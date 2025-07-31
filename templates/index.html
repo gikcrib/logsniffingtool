@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <title>Log Sniffing Tool</title>
+    <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="toast" class="toast"></div>
+        <header class="app-header">
+			<div class="branding">
+			    <img src="/static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool" class="logo">
+			    <span class="title">Log Sniffing Tool</span>
+			</div>
+            <div id="topControls" class="top-controls">
+                <button id="themeToggleBtn" title="Toggle Theme">🌗</button>
+                <button id="refreshPageBtn" title="Refresh Page">🔄</button>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <div class="tab-header">
+                <button class="tab-button active" data-tab="error-tab">Error Summary</button>
+                <button class="tab-button" data-tab="soap-tab">Parsed XMLs</button>
+                <button class="tab-button" data-tab="search-tab">Search Tools</button>
+				<button class="tab-button" data-tab="rawlogs-tab">View Raw Logs</button>
+            </div>
+	
+            <!-- Error Summary Tab -->
+            <div id="error-tab" class="tab-content active">
+
+				 <div class="section-header">
+					<h2>📄 Summary of Errors Found</h2>
+				 </div>
+				 <div class="filter-row">
+					<div class="log-controls">
+					  <button id="openDownloadModalBtn" class="download-btn">📥 Download Remote Logs</button>
+
+					  <!-- 🔍 Analyze Logs radio group -->
+					  <label class="analyze-label" style="margin-left: 1rem;">🔍 Select Option:</label>
+					  <label><input type="radio" name="analyzeMode" value="all" checked> Review all logs</label>
+					  <label><input type="radio" name="analyzeMode" value="specific"> Review Targeted logs</label>
+
+					  <!-- 📁 Dropdown -->
+					  <!-- label for="logSelect" style="margin-left: 1rem;">📁 Log file:</label -->
+					  <select id="logSelect" class="searchtoolfilters-select"></select>
+
+					  <!-- 🔄 Refresh Log list -->
+					  <button id="refreshBtn" class="reviewlogs-btn" title="Refresh Log List">🔄 Refresh List</button>
+
+					  <!-- 🧪 Start -->
+					  <button id="startAnalysisBtn" class="reviewlogs-btn">🧪 Review Logs</button>
+
+					</div>
+				 </div>
+				 
+				 <div id="errorCountSummary" class="error-summary">
+					<div id="errorCountSummary" class="error-summary">
+					  <h3>📄 Total Number of Errors Found</h3>
+
+					  <!-- 🧱 Flex Container for 3 Error Types -->
+					  <div class="error-bar-group">
+						
+						<!-- 🔴 FATAL -->
+						<div class="error-bar fatal">
+						  🔴 FATAL: <span id="fatalCount">0</span>
+						  <div class="bar"><div class="fill" id="fatalBar"></div></div>
+						</div>
+
+						<!-- 🟠 ERROR -->
+						<div class="error-bar error">
+						  🟠 ERROR: <span id="errorCount">0</span>
+						  <div class="bar"><div class="fill" id="errorBar"></div></div>
+						</div>
+
+						<!-- 🟡 WARN -->
+						<div class="error-bar warn">
+						  🟡 WARN: <span id="warnCount">0</span>
+						  <div class="bar"><div class="fill" id="warnBar"></div></div>
+						</div>
+
+					  </div>
+					</div>
+
+
+					<!-- 🔽 BEGIN: Error Details Table -->
+					<div id="errorDetailsTableWrapper" style="margin-top: 20px;">
+					   <h3>📋 Parsed Errors From Logs</h3>
+					   
+						<!-- 🔍 Find options -->
+						<div class="filter-row" id="filterControls">
+						  <input type="text" id="threadFilter" placeholder="🔍 Filter by Thread" disabled>
+						  <input type="text" id="serviceFilter" placeholder="🔍 Filter by Service" disabled>
+						  <button id="clearFiltersBtn" disabled>🔄 Clear Filters</button>
+						</div>
+						
+						<table id="errorDetailsTable" class="log-table">
+						  <thead>
+							<tr>
+							  <th class="sortable">Log File</th>
+							  <th class="sortable">Line Number</th>
+							  <th class="sortable">Thread ID</th>
+							  <th class="sortable">Service</th>
+							  <th class="sortable">Snippet</th>
+							</tr>
+						  </thead>
+						  <tbody>
+							<!-- Rows will be dynamically inserted here via JS -->
+						  </tbody>
+						</table>
+					</div>
+					<!-- 🔼 END: Error Details Table -->
+				 </div> <!-- end of class="error-summary" section -->
+				 
+				
+            </div>
+
+            <!-- SOAP XML Tab -->
+            <div id="soap-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>🧩 Services SOAP XML RQ/RS</h2>
+                </div>
+                <div class="filter-row" id="rqrsFilterControls">
+                    <input type="text" id="rqrsThreadFilter" placeholder="🔍 Filter by Thread ID" disabled>
+                    <input type="text" id="rqrsTagFilter" placeholder="🔍 Filter by RQ/RS" disabled>
+                    <label><input type="checkbox" id="rqrsDlxCheckbox" disabled> Filter DLX services</label>
+                    <label><input type="checkbox" id="rqrsErrorCheckbox" disabled> Filter Errors</label>
+                    <button id="rqrsClearFiltersBtn" class="searchtoolfilters-button" disabled>❌ Clear Filters</button>
+                </div>
+                <div class="rqrs-table-container">
+                    <table id="rqrsTable" class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Line Number</th>
+                                <th>Thread ID</th>
+                                <th>Services SOAP XML RQ/RS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+			
+            <!-- Search Tools Tab -->
+            <div id="search-tab" class="tab-content">
+					
+				<!-- 🔍 Search Tools Section START -->
+				<div class="section-header">
+				  <h2>🔍 Search Tools</h2>
+				</div>
+
+				<!-- 🔍 Find options -->
+				<div class="search-filter-row">
+					<input type="text" id="searchInput" class="searchtoolfilters-input" placeholder="✏️ Type here and click Search.">
+					<label class="searchtoolfilters-label" style="margin-left: 1rem;">🔍 Scan Option:</label>
+					<label class="searchtoolfilters-label"><input type="radio" class="searchtoolfilters-radio" name="searchMode" value="all" checked> All Logs</label>
+					<label class="searchtoolfilters-label"><input type="radio" class="searchtoolfilters-radio" name="searchMode" value="targeted"> Targeted Log</label>
+					<select id="fileSelect" class="searchtoolfilters-select">
+					  <option value="">-- Select Target File --</option>
+					</select>
+					<button id="refresListhSearchToolBtn" class="searchtoolfilters-button" title="Refresh Log List">🔄 Refresh List</button>
+					<button id="searchBtn" class="searchtoolfilters-button">🔍 Search</button>
+					<label class="searchtoolfilters-label">
+					  <input type="checkbox" id="streamingToggle" checked disabled hidden> <!-- Use Real-Time Streaming -->
+					</label>
+				</div>
+
+				<!-- 🔽 Search Results Table -->
+				<div class="searchtool-table-container">
+				  <!-- 🌟 NEW: Add this summary div -->
+				  <div id="searchSummary" class="search-summary">
+					Files Scanned: 0 | Files with Matches: 0 | Total Occurrences: 0 | Time: 0.0s
+				  </div>
+					<table id="searchResults" class="searchtooltable">
+					  <thead>
+						<tr>
+						  <th>Log File</th>
+						  <th>Line Number</th>
+						  <th>Thread ID</th>
+						  <th>Service</th>
+						  <th>Snippet</th>
+						</tr>
+					  </thead>
+					  <tbody>
+						<!-- Filled by JS -->
+					  </tbody>
+					</table>
+				</div>				
+            </div>
+
+				<!-- 🔄 Search Progress Modal -->
+				<div id="progressModal" class="searchtool-modal" style="display:none;">
+				  <div class="searchtool-modal-content">
+					<h3>Search is now in progress...</h3>
+					<p>
+					  We are now searching for the inputted string you are looking for.<br><br>
+					  This may take a while, depending on the number of lines to scan and number of files to check.<br>
+					  Please <strong>patiently wait</strong> or you may <strong>abort</strong> the process anytime.
+					</p>
+					<div class="searchtool-spinner"></div>
+					<!-- Progress bar will be inserted here automatically -->
+					<button id="abortBtn">⛔ Abort Search</button>
+				  </div>
+				</div>
+
+				<!-- 📄 Show Details Modal -->
+				<div id="detailsModal" style="display:none;" class="searchtool-modal">
+				  <div class="searchtool-modal-content">
+					<h3 class="searchtool-modal-title">📄 Snippet Details</h3>
+					<pre id="detailsContent" class="searchtool-modal-pre" style="max-height:300px;overflow:auto;"></pre>
+					<button id="copyBtn">📋 Copy</button>
+					<button id="closeBtn">❌ Close</button>
+				  </div>
+				</div>
+
+				<!-- View Raw Logs Tab -->
+				<div id="rawlogs-tab" class="tab-content">
+					<!-- 🔍 View Raw Logs Section START -->
+					<div class="section-header">
+						<h2>🔍 View Logs Tool</h2>
+					</div>
+
+					<!-- 🔍 View Logs options -->
+					<div class="logview-controls">
+						<!-- label class="logview-label" style="margin-left: 1rem;">🔍 Select File:</label -->
+						<select id="logview-file-select" class="logview-file-select">
+							<option value="">-- Select Target File --</option>
+						</select>
+						<button id="logview-refresh-btn" class="logview-refresh-btn" title="Refresh Log List">🔄 Refresh List</button>
+						<button id="logview-load-btn" class="logview-load-btn" title="Load Selected File">📁 Load File</button>
+					</div><br>
+					<div class="logview-controls">
+						<input type="text" id="logview-search-input" class="logview-search-input" placeholder="✏️ Type here and click Search.">
+						<label class="logview-label"><input type="checkbox" id="logview-whole-word">✅ Whole word</label>
+						<button id="logview-search-btn" class="logview-search-btn" title="🔍 Search">🔍 Search</button>
+						<button id="logview-prev-btn" class="logview-icon-btn" title="Find Previous">Prev ⏪</button>
+						<button id="logview-next-btn" class="logview-icon-btn" title="Find Next">Next ⏩</button>
+						<button id="logview-goto-btn" class="logview-goto-btn" title="Go to line">🔍 Go To</button>
+						<input type="number" id="logview-goto-input" class="logview-goto-input" placeholder="Line number">
+						<button id="logview-copy-btn" class="logview-copy-btn">📋 Copy</button>
+						<button id="logview-wrap-btn" class="logview-wrap-btn" title="Toggle Word Wrap">📜 Word Wrap</button>
+					</div>
+
+					<!-- Status bar -->
+					<div id="logview-status" class="logview-status">🟢 Ready and waiting...</div>
+
+					<!-- Log file viewport -->
+					<div id="logview-viewport" class="logview-viewport">
+						<div id="logview-content" class="logview-content"></div>
+					</div>
+
+				</div>
+        </div> <!-- End of tabs -->
+
+        <!-- JavaScript Files Section-->
+		
+		 <!-- JavaScript Script for the tabular page -->
+         <script>
+            document.addEventListener('DOMContentLoaded', function() {
+               const tabButtons = document.querySelectorAll('.tab-button');
+               const tabContents = document.querySelectorAll('.tab-content');
+               
+               tabButtons.forEach(button => {
+                  button.addEventListener('click', () => {
+                     // Remove active class from all buttons and contents
+                     tabButtons.forEach(btn => btn.classList.remove('active'));
+                     tabContents.forEach(content => content.classList.remove('active'));
+                     
+                     // Add active class to clicked button and corresponding content
+                     button.classList.add('active');
+                     const tabId = button.getAttribute('data-tab');
+                     document.getElementById(tabId).classList.add('active');
+                  });
+               });
+            });
+         </script>
+         	<!-- 🔗 Link to Search Tool Frontend JS -->
+			<script src="./js/searchToolFrontEnd.js"></script>
+			
+			<!-- 🔍 Link to ViewLog Frontend JS -->
+			<script src="./js/viewrawlogs.js"></script>
+
+			<!-- 🔗 Link to MAIN Frontend JS -->
+			<script src="./js/mainFrontEnd.js"></script>
+
+        <!-- All modal dialogs remain here -->
+
+			<!-- 🔍 Modal overlay while analyzing -->
+			<div id="analysisOverlay" class="modal-overlay" style="display: none;">
+			  <div class="modal-box">
+				<div class="modal-content">
+				  <h2>🔍 Analyzing logs, please wait...</h2>
+				  <p>This may take time, depending on file size and/or number of lines to process.</p><br>
+				  <p>First, the system is checking for errors from the logs.</p>
+				  <p>Then, parsing and caching XMLs from the logs.</p>
+				</div>
+			  </div>
+			</div>
+			
+			<!-- 🔄 Search Progress Modal -->
+			<div id="progressModal" class="searchtool-modal" style="display:none;">
+			  <div class="searchtool-modal-content">
+				<h3>Search is now in progress...</h3>
+				<p>
+				  We are now searching for the inputted string you are looking for.<br><br>
+				  This may take a while, depending on the number of lines to scan and number of files to check.<br>
+				  Please <strong>patiently wait</strong> or you may <strong>abort</strong> the process anytime.
+				</p>
+				<div class="searchtool-spinner"></div>
+				<!-- Progress bar will be inserted here automatically -->
+				<button id="abortBtn">⛔ Abort Search</button>
+			  </div>
+			</div>
+
+			<!-- 📄 Show Details Modal -->
+			<div id="detailsModal" style="display:none;" class="searchtool-modal">
+			  <div class="searchtool-modal-content">
+				<h3 class="searchtool-modal-title">📄 Snippet Details</h3>
+				<pre id="detailsContent" class="searchtool-modal-pre" style="max-height:300px;overflow:auto;"></pre>
+				<button id="copyBtn">📋 Copy</button>
+				<button id="closeBtn">❌ Close</button>
+			  </div>
+			</div>
+
+		  <!-- SCP Modal Overlay window (START) -->
+		 <div id="downloadModal" class="modal-overlay" style="display:none;" data-state="idle">
+			 <div class="modal">
+				<h2>SCP Download New Logs To Process</h2>
+				<hr>
+				<div class="modal-field">
+				   🔐 Remote host alias (e.g. cca-tst-1):<br>
+				   <input type="text" id="scpHost" placeholder="e.g. cca-tst-1">
+				</div>
+				<div class="modal-field">
+				   👤 SSH username [default: remotedeploy]:<br>
+				   <input type="text" id="scpUser" placeholder="remotedeploy">
+				</div>
+				<div class="modal-field">
+				   📁 Remote log directory [default: /datalex/logs/jboss]:<br>
+				   <input type="text" id="scpDir" placeholder="/datalex/logs/jboss">
+				</div>
+				<div class="modal-field">
+				   🗂️ Filename or pattern [default: matrixtdp4.log*]:<br>
+				   <input type="text" id="scpPattern" placeholder="matrixtdp4.log*">
+				</div>
+				<div class="modal-actions">
+				   <button id="downloadLogsBtn" onclick="handleRemoteLogDownload()">
+				   <span class="spinner" style="display:none;"></span>
+				   <span class="btn-text">Download Logs</span>
+				   </button>
+				   <button id="cancelDownloadBtn">❌ Cancel</button>
+				</div>
+				<div id="downloadProgressWrapper" style="display:none;">
+				   <div class="progress-bar">
+				   	  <div class="loading-spinner" id="downloadSpinner" style="display:none; text-align:center;"></div>
+					  <div class="progress-fill" style="width: 0%;"></div>
+				   </div>
+				   <div id="progressText" class="progress-text">0% | ETA: calculating...</div>
+				</div>
+			 </div>
+		  </div>
+		  <!-- Result modal overlay -->
+		  <div id="downloadResultModal" class="modal-overlay" style="display:none;">
+			 <div class="modal">
+				<h3 id="resultMessage">✅ Download complete</h3>
+				<p id="resultCountdown">The download window will close in 10s if no response from the user.</p>
+				<div class="modal-actions">
+				   <button id="closeResultBtn">OK</button>
+				</div>
+			 </div>
+		  </div>
+		  <!-- Confirmation modal for keeping or deleting logs -->
+		  <div id="overwriteConfirmModal" class="modal-overlay" style="display: none;">
+			 <div class="modal">
+				<h3>⚠️ Existing logs detected</h3>
+				<p>Do you want to replace the existing logs and add more, or delete all before downloading?</p>
+				<div class="modal-actions">
+				   <button id="keepLogsBtn">✅ Replace Existing Logs</button>
+				   <button id="deleteLogsBtn">🗑️ Delete Existing Logs</button>
+				</div>
+			 </div>
+		  </div>
+		  <!-- Abort Download Confirmation Modal -->
+		  <div id="abortConfirmModal" class="modal-overlay" style="display: none;">
+			 <div class="modal">
+				<h3>Abort Download?</h3>
+				<p>Do you want to abort the downloading?</p>
+				<div class="modal-buttons">
+				   <button id="confirmAbortYes"><span class="spinner" style="display:none;"></span><span class="btn-text">Yes</span></button>
+				   <button id="confirmAbortNo">No</button>
+				</div>
+			 </div>
+		  </div>
+
+		<!-- Extra Confirmation Modal Before Deleting Logs -->
+		<div id="finalDeleteConfirmModal" class="modal-overlay" style="display: none;">
+		  <div class="modal">
+			<h3>Confirm Download</h3>
+			<p>❓ This process will delete all the files in your <code>./logs/</code> directory, do you want to continue?</p>
+			<div class="modal-buttons">
+			  <button id="confirmFinalDeleteYes">Yes</button>
+			  <button id="confirmFinalDeleteNo">No</button>
+			</div>
+		  </div>
+		</div>
+		  <!-- SCP Modal Overlay window (END) -->
+
+		<div id="analysisErrorModal" class="modal-overlay" style="display: none;">
+		  <div class="modal-content">
+			<h3>❌ Analysis Failed</h3>
+			<p id="analysisErrorMessage">Something went wrong while analyzing the logs.</p>
+			<button onclick="closeAnalysisErrorModal()">OK</button>
+		  </div>
+		</div>
+
+		<div id="logContextModal" class="modal-overlay" style="display: none;">
+		  <div class="modal-box">
+			<h2>📄 Context from Log File</h2>
+			<pre id="logContextText">⏳ Loading surrounding log lines...</pre>
+			<button id="logContextCloseBtn">Close</button>
+		  </div>
+		</div>
+
+		<!-- ✅ XML Modal Window -->
+		<div id="customXmlModal" class="custom-xml-modal" style="display: none;">
+		  <div class="custom-xml-container">
+		    <!-- 🧾 Optional: Title -->
+		    <h3 id="customModalTitle" class="custom-xml-title">XML Viewer</h3>
+
+		    <!-- 📄 Where the pretty-printed XML is shown -->
+		    <pre id="xmlContent" class="custom-xml-viewer"></pre>
+
+		    <!-- ❌ Close Button -->
+		    <button class="custom-xml-close-btn" onclick="closeXmlModal()">❌ Close</button>
+		    <!-- 📋 New Copy Button -->
+		    <button class="custom-xml-copy-btn" onclick="copyXmlContent()">📋 Copy</button>
+		  </div>
+		</div>
+
+		<!-- 🚫 Modal: Generic Modal Found -->
+		<div id="noLogsModal" class="modal">
+		  <div class="modal-content">
+			<span class="close" onclick="closeNoLogsModal()">&times;</span>
+			<h2>⚠️ No Data processed...</h2>
+			<p>Possible reasons:</p>
+			<p>1. No log files were found in the <code>./logs</code> directory.</p>
+			<p>2. Option selected was "Review all logs" but there are no logs in the dropdown.</p>
+			<p>3. No errors found in the logs to parse.</p> <br>
+		  </div>
+		</div>
+		
+		<!-- 🕐 Modal for Loading SOAP XML -->
+		<div id="loadingXmlModal" class="loading-xml-modal">
+		  <div class="loading-xml-container">
+			<h3 class="loading-xml-title">🔄 Loading SOAP XML Data</h3>
+			<p class="loading-xml-message">
+			  Fetching the requested XML from the logs and generating the SOAP XML is in progress...<br>
+			  <strong>Please wait.</strong>
+			</p>
+		  </div>
+		</div>
+
+		<!-- 🔄 Refresh Confirmation Modal -->
+		<div id="refreshConfirmModal" class="modal-overlay">
+		  <div class="modal-box">
+			<h2>🔄 Confirm Page Refresh</h2>
+			<p>Are you sure you want to refresh the page? Unsaved data may be lost.</p>
+			<div style="margin-top: 1rem; text-align: center;">
+			  <button id="confirmRefreshBtn" class="modal-btn confirm">✅ Yes, Refresh</button>
+			  <button id="cancelRefreshBtn" class="modal-btn cancel">❌ Cancel</button>
+			</div>
+		  </div>
+		</div>
+
+    </div>
+</body>
+</html>
