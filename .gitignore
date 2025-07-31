@@ -1,4 +1,5 @@
 /__pycache__/
+/venv/
 /logs/
 /temp/
 /applog/
@@ -8,3 +9,5 @@
 *.txt
 *.Identifier
 *.pid
+*.zip
+*.7z
