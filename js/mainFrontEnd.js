@@ -21,6 +21,52 @@
 	 .replace(/\[WARN\]/g, `<span style="color:orange;">[WARN]</span>`)
 	 .replace(/\[FATAL\]/g, `<span style="background:red;color:white;">[FATAL]</span>`);
  }
+
+	// ✅ Memory reset function (safe frontend cleanup)
+	function resetMemoryState_MainFrontEnd() {
+	  // Clear RQRS table and cache
+	  const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+	  if (rqrsTableBody) rqrsTableBody.innerHTML = "";
+	  window.rqrsCache = [];
+
+	  // Clear error summary table
+	  const errorDetailsTableBody = document.querySelector("#errorDetailsTable tbody");
+	  if (errorDetailsTableBody) errorDetailsTableBody.innerHTML = "";
+
+	  // Reset count bars
+	  resetErrorSummary();
+
+	  // Reset filters
+	  document.getElementById("threadFilter").value = "";
+	  document.getElementById("serviceFilter").value = "";
+	  document.getElementById("rqrsThreadFilter").value = "";
+	  document.getElementById("rqrsTagFilter").value = "";
+	  document.getElementById("rqrsDlxCheckbox").checked = false;
+	  document.getElementById("rqrsErrorCheckbox").checked = false;
+
+	  // Disable filter controls
+	  ["threadFilter", "serviceFilter", "rqrsThreadFilter", "rqrsTagFilter", "rqrsDlxCheckbox", "rqrsErrorCheckbox", "rqrsClearFiltersBtn", "clearFiltersBtn"]
+	    .forEach(id => {
+	      const el = document.getElementById(id);
+	      if (el) el.disabled = true;
+	    });
+
+	  console.log("🧼 MainFrontEnd memory state cleaned up");
+	}
+
+	// ✅ Hook tab switch to trigger memory reset
+	window.addEventListener("DOMContentLoaded", () => {
+	  const tabButtons = document.querySelectorAll('.tab-button');
+	  tabButtons.forEach(btn => {
+	    btn.addEventListener('click', () => {
+	      // Only reset when switching away from this tab
+	      const activeTabId = btn.getAttribute('data-tab');
+	      if (activeTabId !== 'error-tab' && activeTabId !== 'soap-tab') {
+	        resetMemoryState_MainFrontEnd();
+	      }
+	    });
+	  });
+	});
  
 async function fetchLogs() {
   const res = await fetch('/list_logs');

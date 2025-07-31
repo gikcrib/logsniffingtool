@@ -346,6 +346,30 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 }); // END --- closing bracket for DOMContentLoaded function
 
+// ✅ NEW: Memory cleanup function for Search Tool tab
+function resetSearchToolMemory() {
+  // Clear any previous search results from memory
+  searchResults = [];
+
+  // Clear the table rows from the results display
+  const tbody = document.querySelector('#searchResults tbody');
+  if (tbody) tbody.innerHTML = '';
+
+  // Reset the summary stats at the top of the Search Tool section
+  const summary = document.getElementById('searchSummary');
+  if (summary) {
+    summary.textContent = 'Files Scanned: 0 | Files with Matches: 0 | Total Occurrences: 0 | Time: 0.0s';
+  }
+
+  // ✅ If we had a streaming EventSource connection (e.g., during real-time search), close it
+  if (window.searchStreamSource) {
+    window.searchStreamSource.close();
+    window.searchStreamSource = null;
+  }
+
+  console.debug('🧹 Search Tool memory cleaned.');
+}
+
 // ✅ Function to dynamically populate fileSelect dropdown
 async function populateFileSelect() {
 	try {

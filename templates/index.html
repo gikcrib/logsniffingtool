@@ -252,32 +252,44 @@
 					<div id="logview-viewport" class="logview-viewport">
 						<div id="logview-content" class="logview-content"></div>
 					</div>
-
 				</div>
         </div> <!-- End of tabs -->
 
         <!-- JavaScript Files Section-->
 		
 		 <!-- JavaScript Script for the tabular page -->
-         <script>
-            document.addEventListener('DOMContentLoaded', function() {
-               const tabButtons = document.querySelectorAll('.tab-button');
-               const tabContents = document.querySelectorAll('.tab-content');
-               
-               tabButtons.forEach(button => {
-                  button.addEventListener('click', () => {
-                     // Remove active class from all buttons and contents
-                     tabButtons.forEach(btn => btn.classList.remove('active'));
-                     tabContents.forEach(content => content.classList.remove('active'));
-                     
-                     // Add active class to clicked button and corresponding content
-                     button.classList.add('active');
-                     const tabId = button.getAttribute('data-tab');
-                     document.getElementById(tabId).classList.add('active');
-                  });
-               });
-            });
-         </script>
+			<script>
+			  // ✅ Run this logic after the page fully loads
+			  document.addEventListener('DOMContentLoaded', function () {
+			    const tabButtons = document.querySelectorAll('.tab-button');
+			    const tabContents = document.querySelectorAll('.tab-content');
+
+			    tabButtons.forEach(button => {
+			      button.addEventListener('click', () => {
+			        // Remove "active" class from all tabs
+			        tabButtons.forEach(btn => btn.classList.remove('active'));
+			        tabContents.forEach(content => content.classList.remove('active'));
+
+			        // Activate selected tab
+			        button.classList.add('active');
+			        const tabId = button.getAttribute('data-tab');
+			        document.getElementById(tabId).classList.add('active');
+
+			        // ✅ NEW: If we switch away from the Search Tools tab,
+			        // and resetSearchToolMemory() exists, call it to clean up browser memory
+			        if (tabId !== 'search-tab' && typeof resetSearchToolMemory === 'function') {
+			          resetSearchToolMemory();  // 🧹 Clear table, searchResults, streaming EventSource
+			        }
+
+					if (tabId !== 'rawlogs-tab' && typeof resetRawLogsMemory === 'function') {
+					  resetRawLogsMemory();
+					}
+
+			      });
+			    });
+			  });
+			</script>
+
          	<!-- 🔗 Link to Search Tool Frontend JS -->
 			<script src="./js/searchToolFrontEnd.js"></script>
 			

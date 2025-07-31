@@ -4,7 +4,7 @@ class LogViewer {
 	    this.currentFile = null;
 	    this.totalLines = 0;
 	    this.lineHeight = 18;
-	    this.allLines = [];
+	    window.rawLogLines = [];
 	    this.isLoading = false;
 	    this.searchResults = [];
 	    this.currentSearchIndex = -1;
@@ -41,7 +41,7 @@ class LogViewer {
 
     setupMemoryCleanup() {
         window.addEventListener('beforeunload', () => {
-            this.allLines = [];
+            window.rawLogLines = [];
             this.searchResults = [];
             this.logContainer.textContent = '';
         });
@@ -54,7 +54,7 @@ class LogViewer {
     }
 
     cleanupMemory() {
-        this.allLines = [];
+        window.rawLogLines = [];
         this.searchResults = [];
         this.logContainer.textContent = '';
         // Clear DOM
@@ -170,7 +170,7 @@ class LogViewer {
 	    try {
 	        // Reset state
 	        this.currentFile = selectedFile;
-	        this.allLines = [];
+	        window.rawLogLines = [];
 	        this.totalLines = 0;
 	        this.searchResults = [];
 	        this.currentSearchIndex = -1;
@@ -212,11 +212,11 @@ class LogViewer {
 	                    
 	                    if (data.lines) {
 	                        // Append new lines instead of replacing
-	                        this.allLines.push(...data.lines);
+	                        window.rawLogLines.push(...data.lines);
 	                        this.totalLines = data.total_lines;
 	                        
 	                        // Only render periodically for performance
-	                        if (isFirstChunk || this.allLines.length % 5000 === 0) {
+	                        if (isFirstChunk || window.rawLogLines.length % 5000 === 0) {
 	                            this.renderAllLines();
 	                            this.updateStatus(`⏳ Please wait, loading file... ${selectedFile} - ${this.totalLines.toLocaleString()} lines loaded`);
 	                            isFirstChunk = false;
@@ -241,7 +241,7 @@ class LogViewer {
 	    const fragment = document.createDocumentFragment();
 	    const container = document.createElement('div');
 	    
-	    this.allLines.forEach((line, index) => {
+	    window.rawLogLines.forEach((line, index) => {
 	        const lineNumber = index + 1;
 	        const lineElement = document.createElement('div');
 	        lineElement.className = 'logview-line';
@@ -290,7 +290,7 @@ class LogViewer {
         this.clearSearchHighlights();
 
         // Find all matches
-        this.allLines.forEach((line, index) => {
+        window.rawLogLines.forEach((line, index) => {
             if (line.toLowerCase().includes(searchTerm)) {
                 this.searchResults.push(index + 1); // Store line numbers
             }
@@ -495,7 +495,7 @@ class LogViewer {
 	    this.updateWrapButtonState();
 	    
 	    // Force complete re-render when toggling wrap
-	    if (this.allLines.length > 0) {
+	    if (window.rawLogLines.length > 0) {
 	        this.renderAllLines();
 	    }
 	    
@@ -632,6 +632,25 @@ class LogViewer {
 
 }
 
+    // ✅ Memory cleanup function for View Raw Logs tab
+    function resetRawLogsMemory() {
+      // Clear cached lines from global memory (if defined)
+      if (window.rawLogLines) window.rawLogLines = [];
+
+      // Reset number of lines loaded
+      if (window.loadedLineCount !== undefined) window.loadedLineCount = 0;
+
+      // Clear log content from DOM
+      const content = document.getElementById('logview-content');
+      if (content) content.innerHTML = '';
+
+      // Reset the status text
+      const status = document.getElementById('logview-status');
+      if (status) status.textContent = '🟢 Ready and waiting...';
+
+      console.debug('🧹 Raw Logs memory cleaned.');
+    }
+    
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     try {
