@@ -1,45 +1,43 @@
 class LogViewer {
     constructor() {
+	    // Core properties
+	    this.currentFile = null;
+	    this.totalLines = 0;
+	    this.lineHeight = 18;
+	    this.allLines = [];
+	    this.isLoading = false;
+	    this.searchResults = [];
+	    this.currentSearchIndex = -1;
+	    this.currentSearchTerm = '';
+	    this.caseSensitive = false;
+	    this.wholeWord = false;
+	    this.wrapEnabled = false;
 
-        // Core properties
-        this.currentFile = null;
-        this.totalLines = 0;
-        this.lineHeight = 18;
-        this.allLines = [];
-        this.isLoading = false;
-        this.searchResults = [];
-        this.currentSearchIndex = -1;
-        this.currentSearchTerm = '';
-        this.caseSensitive = false;
-        this.wholeWord = false;
-        this.wrapEnabled = false;
-
-        // UI elements
-        this.logContainer = document.getElementById('logview-content');
-        this.fileSelect = document.getElementById('logview-file-select');
-        this.refreshBtn = document.getElementById('logview-refresh-btn');
-        this.loadBtn = document.getElementById('logview-load-btn');
-        this.searchInput = document.getElementById('logview-search-input');
-        this.searchBtn = document.getElementById('logview-search-btn');
-        this.copyBtn = document.getElementById('logview-copy-btn');
-        this.logViewport = document.getElementById('logview-viewport');
-        this.statusBar = document.getElementById('logview-status');
-        this.wrapBtn = document.getElementById('logview-wrap-btn');
-        // this.wrapEnabled = localStorage.getItem('logViewerWrapEnabled') === 'true';
-
-        // Initialize whole word checkbox
-        this.wholeWordCheckbox = document.getElementById('logview-whole-word');
-        this.wholeWordCheckbox.addEventListener('change', (e) => {
-            this.wholeWord = e.target.checked;
-            if (this.searchResults.length > 0) {
-                this.navigateToCurrentResult(); // Re-highlight with new setting
-            }
-        });
-        // Call setup methods
-        this.setupEventListeners();
-        this.refreshFileList(); // Populate dropdown on load
-        this.setupMemoryCleanup();
+	    // Initialize UI elements first
+	    this.initUIElements();
+	    
+	    // Then set up wrap state
+	    this.updateWrapButtonState();
+	    
+	    // Rest of initialization
+	    this.setupEventListeners();
+	    // this.refreshFileList();
+	    this.setupMemoryCleanup();
     }
+
+	initUIElements() {
+	    this.logContainer = document.getElementById('logview-content');
+	    this.fileSelect = document.getElementById('logview-file-select');
+	    this.refreshBtn = document.getElementById('logview-refresh-btn');
+	    this.loadBtn = document.getElementById('logview-load-btn');
+	    this.searchInput = document.getElementById('logview-search-input');
+	    this.searchBtn = document.getElementById('logview-search-btn');
+	    this.copyBtn = document.getElementById('logview-copy-btn');
+	    this.logViewport = document.getElementById('logview-viewport'); // This is critical
+	    this.statusBar = document.getElementById('logview-status');
+	    this.wrapBtn = document.getElementById('logview-wrap-btn');
+	    this.wholeWordCheckbox = document.getElementById('logview-whole-word');
+	}
 
     setupMemoryCleanup() {
         window.addEventListener('beforeunload', () => {
@@ -50,6 +48,7 @@ class LogViewer {
 
         // Optional: Add cleanup when changing files
         document.getElementById('logview-file-select')?.addEventListener('change', () => {
+        	this.updateStatus(`🔄 File selection changed.`);
             this.cleanupMemory();
         });
     }
@@ -106,10 +105,6 @@ class LogViewer {
             () => this.navigateToPrevResult()
         );
 
-		document.getElementById('logview-wrap-btn').addEventListener('click', () => {
-		    this.toggleWordWrap();
-		});
-
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'F3') {
@@ -133,6 +128,8 @@ class LogViewer {
     }
 
     async refreshFileList() {
+    	// Updating Status
+    	this.updateStatus(`⏳ Please wait, scanning files and reloading the list...`);
         try {
             const response = await fetch('/api/logs/list');
             const data = await response.json();
@@ -156,16 +153,17 @@ class LogViewer {
                 this.fileSelect.appendChild(option);
             });
 
-            this.showToast(`Loaded ${sortedFiles.length} log files`);
+            this.updateStatus(`✅ Log listing is completed, select a file now.`);
+            this.showToast(`✅ Loaded ${sortedFiles.length} log files`);
         } catch (error) {
-            this.showModal('Error', `Failed to refresh files: ${error.message}`);
+            this.showModal('Error', `🔴 Failed to refresh files: ${error.message}`);
         }
     }
 
 	async loadSelectedFile() {
 	    const selectedFile = this.fileSelect.value;
 	    if (!selectedFile) {
-	        this.showModal('Warning', 'Please select a file first');
+	        this.showModal('Warning', '🟠 Please select a file first');
 	        return;
 	    }
 
@@ -178,7 +176,7 @@ class LogViewer {
 	        this.currentSearchIndex = -1;
 	        
 	        // Show loading state
-	        this.logContainer.innerHTML = '<div class="logview-loading">Loading file...<div class="loading-spinner"></div></div>';
+	        this.logContainer.innerHTML = '<div class="logview-loading">⏳ Please wait, loading file...<div class="loading-spinner"></div></div>';
 	        
 	        // Load file
 	        const response = await fetch(`/api/logs/stream?filename=${encodeURIComponent(selectedFile)}`);
@@ -220,7 +218,7 @@ class LogViewer {
 	                        // Only render periodically for performance
 	                        if (isFirstChunk || this.allLines.length % 5000 === 0) {
 	                            this.renderAllLines();
-	                            this.updateStatus(`Loading ${selectedFile} - ${this.totalLines.toLocaleString()} lines loaded`);
+	                            this.updateStatus(`⏳ Please wait, loading file... ${selectedFile} - ${this.totalLines.toLocaleString()} lines loaded`);
 	                            isFirstChunk = false;
 	                        }
 	                    }
@@ -232,70 +230,48 @@ class LogViewer {
 	        
 	        // Final render with all lines
 	        this.renderAllLines();
-	        this.updateStatus(`Loaded ${selectedFile} - ${this.totalLines.toLocaleString()} lines`);
+	        this.updateStatus(`💯 100% Loaded ${selectedFile} - ${this.totalLines.toLocaleString()} lines`);
 	        
 	    } catch (error) {
-	        this.showModal('Error', `Failed to load file: ${error.message}`);
+	        this.showModal('🔴 Error', `Failed to load file: ${error.message}`);
 	    }
 	}
 
 	renderAllLines() {
-	    // Create document fragment for better performance
 	    const fragment = document.createDocumentFragment();
 	    const container = document.createElement('div');
 	    
-	    // Process each line of the log file
 	    this.allLines.forEach((line, index) => {
 	        const lineNumber = index + 1;
 	        const lineElement = document.createElement('div');
 	        lineElement.className = 'logview-line';
 	        lineElement.dataset.line = lineNumber;
 	        
-	        // Clean and prepare the line content:
-	        // 1. Preserve leading whitespace (don't trimStart)
-	        // 2. Only trim trailing whitespace
-	        // 3. Replace tabs with 4 spaces
-	        // 4. Escape HTML special characters
 	        const cleanedLine = line.replace(/\t/g, '    ').trimEnd();
 	        const safeLineContent = this.escapeHtml(cleanedLine);
 	        
-	        // Create the line HTML structure
 	        lineElement.innerHTML = `
 	            <span class="logview-line-number">${lineNumber}</span>
 	            <span class="logview-line-content">${safeLineContent}</span>
 	        `;
 	        
-	        // Highlight if this line is in search results
 	        if (this.searchResults.includes(lineNumber)) {
 	            lineElement.classList.add('logview-line-highlight');
 	        }
 	        
-	        // Add the line to our container
 	        container.appendChild(lineElement);
 	    });
 	    
-	    // Add all lines to the fragment
 	    fragment.appendChild(container);
-	    
-	    // Update the DOM efficiently
 	    this.logContainer.innerHTML = '';
 	    this.logContainer.appendChild(fragment);
 	    
-	    // Adjust container height based on wrap mode
+	    // Apply wrap styles if enabled
 	    if (this.wrapEnabled) {
-	        // In wrap mode, let the content determine the height
-	        this.logContainer.style.height = 'auto';
-	        
-	        // Force reflow to ensure proper rendering with the new CSS
-	        void this.logContainer.offsetHeight;
+	        this.logViewport.classList.add('wrap-enabled');
 	    } else {
-	        // In non-wrap mode, set fixed height based on line count
+	        this.logViewport.classList.remove('wrap-enabled');
 	        this.logContainer.style.height = `${this.totalLines * this.lineHeight}px`;
-	    }
-	    
-	    // If we have active search results, maintain the current highlight
-	    if (this.currentSearchIndex >= 0) {
-	        this.highlightCurrentSearchResult();
 	    }
 	}
 
@@ -321,7 +297,7 @@ class LogViewer {
         });
 
         if (this.searchResults.length === 0) {
-            this.showModal('Not Found', `"${query}" was not found in the file.`);
+            this.showModal('❌ No Match Found!', `⚠️ "${query}" was not found in the file.`);
             return;
         }
 
@@ -334,7 +310,6 @@ class LogViewer {
         } else {
             this.searchInput.classList.remove('has-results');
         }
-
     }
 
     clearSearchHighlights() {
@@ -367,7 +342,7 @@ class LogViewer {
         const lineNumber = this.searchResults[this.currentSearchIndex];
         this.scrollToLine(lineNumber);
         this.highlightCurrentSearchResult();
-        this.updateStatus(`Match ${this.currentSearchIndex + 1} of ${this.searchResults.length}`);
+        this.updateStatus(`🎯 Match found! [RESULT]: ${this.currentSearchIndex + 1} of ${this.searchResults.length}. Click Next or Prev.`);
     }
 
     highlightCurrentSearchResult() {
@@ -501,33 +476,45 @@ class LogViewer {
         this.scrollToLine(lineNumber);
     }
 
-	toggleWordWrap() {
-	    this.wrapEnabled = !this.wrapEnabled;
-	    const wrapBtn = document.getElementById('logview-wrap-btn');
+	updateWrapButtonState() {
+	    if (!this.logViewport || !this.wrapBtn) return;
 	    
 	    if (this.wrapEnabled) {
 	        this.logViewport.classList.add('wrap-enabled');
-	        wrapBtn.textContent = '📜 No Wrap';
-	        wrapBtn.classList.add('active');
-	        
-	        // Adjust container height for wrapped content
-	        this.logContainer.style.height = 'auto';
+	        this.wrapBtn.textContent = '↩️ Undo Word Warp';
+	        this.wrapBtn.classList.add('active');
 	    } else {
 	        this.logViewport.classList.remove('wrap-enabled');
-	        wrapBtn.textContent = '📜 Wrap';
-	        wrapBtn.classList.remove('active');
-	        
-	        // Reset to fixed height
-	        this.logContainer.style.height = `${this.totalLines * this.lineHeight}px`;
+	        this.wrapBtn.textContent = '📜 Word Wrap';
+	        this.wrapBtn.classList.remove('active');
 	    }
-	    
-	    // Force reflow to ensure proper rendering
-	    this.logViewport.style.overflow = 'hidden';
-	    void this.logViewport.offsetHeight;
-	    this.logViewport.style.overflow = 'auto';
 	}
 
-    // Helper method for dropdown sections
+	toggleWordWrap() {
+	    this.wrapEnabled = !this.wrapEnabled;
+	    this.updateWrapButtonState();
+	    
+	    // Force complete re-render when toggling wrap
+	    if (this.allLines.length > 0) {
+	        this.renderAllLines();
+	    }
+	    
+	    // Additional check for proper wrapping and check computed styles
+	    setTimeout(() => {
+	    	const content = document.getElementById('logview-content');
+	        if (this.wrapEnabled) {
+	        	this.updateStatus(`⏳ Word wrapping toggled and viewing is updated. `);
+	            this.logContainer.style.height = 'auto';
+	            this.logViewport.style.overflowX = 'hidden';
+	        } else {
+	        	this.updateStatus(`↩️ Word wrapping toggled and set to default. `);
+	            this.logContainer.style.height = `${this.totalLines * this.lineHeight}px`;
+	            this.logViewport.style.overflowX = 'auto';
+	        }
+	        console.log('Computed white-space:', window.getComputedStyle(content).whiteSpace);
+	    }, 100);
+	}
+
     addDropdownSectionHeader(text) {
         const header = document.createElement('option');
         header.disabled = true;
