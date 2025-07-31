@@ -1,4 +1,5 @@
 # Import modules
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Query, HTTPException, Response, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, PlainTextResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,8 +19,44 @@ from xml.etree import ElementTree as ET
 from io import StringIO
 import uvicorn, shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading, psutil, signal, traceback, zipfile, tarfile, gzip
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This replaces both @app.on_event("startup") and startup_event()
+    
+    # 1. Show ASCII Banner (your original startup code)
+    banner = r"""
+ ##::::::::'#######:::'######:::::::'######::'##::: ##:'####:'########:'########:'########:'########::
+ ##:::::::'##.... ##:'##... ##:::::'##... ##: ###:: ##:. ##:: ##.....:: ##.....:: ##.....:: ##.... ##:
+ ##::::::: ##:::: ##: ##:::..:::::: ##:::..:: ####: ##:: ##:: ##::::::: ##::::::: ##::::::: ##:::: ##:
+ ##::::::: ##:::: ##: ##::'####::::. ######:: ## ## ##:: ##:: ######::: ######::: ######::: ########::
+ ##::::::: ##:::: ##: ##::: ##::::::..... ##: ##. ####:: ##:: ##...:::: ##...:::: ##...:::: ##.. ##:::
+ ##::::::: ##:::: ##: ##::: ##:::::'##::: ##: ##:. ###:: ##:: ##::::::: ##::::::: ##::::::: ##::. ##::
+ ########:. #######::. ######::::::. ######:: ##::. ##:'####: ##::::::: ##::::::: ########: ##:::. ##:
+........:::.......::::......::::::::......:::..::::..::....::..::::::::..::::::::........::..:::::..::
+:: Log Sniffer Tool ::                                                           (v1.0.0.BETA_RELEASE)
+    """
+    print(banner)
+    
+    # 2. Your original startup_event() logic
+    logger.info("FastAPI server starting...")
+    logger.info(f"Log directory: {os.path.abspath(Config.LOG_DIR)}")
+    
+    await initialize_critical_services()
+    
+    if Config.PRELOAD_ENABLED:
+        asyncio.create_task(delayed_background_preload())
+        logger.info("Background preload will start after server becomes responsive")
+    else:
+        logger.info("Skipping preload (PRELOAD_ENABLED=False)")
+    
+    yield  # This is where your app runs
+    
+    # (Optional) Add shutdown logic here if needed
+    logger.info("Server shutting down...")
+
 # Initialize FastAPI
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # Configuration Constants
 class Config:
@@ -112,7 +149,9 @@ def setup_logger():
 
     return logger
 
-logger = setup_logger()
+if os.getenv("RELOADER") != "true":
+    # Only configure logging in the main process
+    logger = setup_logger()  # Your existing logger setup
 
 def printf(msg: str, level: str = "info"):
     level = level.lower()
@@ -665,33 +704,6 @@ async def combined_middleware(request: Request, call_next):
 ################################
 # Event Handlers
 ################################
-@app.on_event("startup")
-async def show_ascii_banner():
-    # Custom ASCII banner for the Log Sniffer Tool
-    banner = r"""
- ##::::::::'#######:::'######:::::::'######::'##::: ##:'####:'########:'########:'########:'########::
- ##:::::::'##.... ##:'##... ##:::::'##... ##: ###:: ##:. ##:: ##.....:: ##.....:: ##.....:: ##.... ##:
- ##::::::: ##:::: ##: ##:::..:::::: ##:::..:: ####: ##:: ##:: ##::::::: ##::::::: ##::::::: ##:::: ##:
- ##::::::: ##:::: ##: ##::'####::::. ######:: ## ## ##:: ##:: ######::: ######::: ######::: ########::
- ##::::::: ##:::: ##: ##::: ##::::::..... ##: ##. ####:: ##:: ##...:::: ##...:::: ##...:::: ##.. ##:::
- ##::::::: ##:::: ##: ##::: ##:::::'##::: ##: ##:. ###:: ##:: ##::::::: ##::::::: ##::::::: ##::. ##::
- ########:. #######::. ######::::::. ######:: ##::. ##:'####: ##::::::: ##::::::: ########: ##:::. ##:
-........:::.......::::......::::::::......:::..::::..::....::..::::::::..::::::::........::..:::::..::
-:: Log Sniffer Tool ::                                                           (v1.0.0.BETA_RELEASE)
-    """
-    print(banner)
-
-async def startup_event():
-    logger.info("FastAPI server starting...")
-    logger.info(f"Log directory: {os.path.abspath(Config.LOG_DIR)}")
-
-    await initialize_critical_services()
-
-    if Config.PRELOAD_ENABLED:
-        asyncio.create_task(delayed_background_preload())
-        logger.info("Background preload will start after server becomes responsive")
-    else:
-        logger.info("Skipping preload (PRELOAD_ENABLED=False)")
 
 async def initialize_critical_services():
     """Initialize essential services before accepting requests"""
@@ -2287,6 +2299,24 @@ async def monitor_page():
     </body>
     </html>
     """
-# Use port 8001 when loading the tool
+########################################################
+# Starting FastAPI server in port 8001 by default
+########################################################
+# Commands during:
+# Development 
+#     python3 -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+# Production:
+#     python3 -m uvicorn main:app --host 0.0.0.0 --port 8001
+# or
+#     python3 python3 main.py
+########################################################
+port = int(os.getenv("FASTAPI_PORT", 8001))
 if __name__ == "__main__":
-    uvicorn.run("main:app", port=8001, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        # reload=True, # Enable only during development
+        workers=1,
+        access_log=False  # Disables duplicate request logs
+    )
