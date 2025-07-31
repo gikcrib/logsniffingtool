@@ -50,7 +50,7 @@
 					  <select id="logSelect" class="searchtoolfilters-select"></select>
 
 					  <!-- 🔄 Refresh Log list -->
-					  <button id="refreshBtn" title="Refresh Log List">🔄</button>
+					  <button id="refreshBtn" class="reviewlogs-btn" title="Refresh Log List">🔄 Refresh List</button>
 
 					  <!-- 🧪 Start -->
 					  <button id="startAnalysisBtn" class="reviewlogs-btn">🧪 Review Logs</button>
@@ -230,7 +230,7 @@
 						<select id="logview-file-select" class="logview-file-select">
 							<option value="">-- Select Target File --</option>
 						</select>
-						<button id="logview-refresh-btn" class="logview-refresh-btn" title="Refresh Log List">🔄 Refresh</button>
+						<button id="logview-refresh-btn" class="logview-refresh-btn" title="Refresh Log List">🔄 Refresh List</button>
 						<button id="logview-load-btn" class="logview-load-btn" title="Load Selected File">📁 Load File</button>
 					</div><br>
 					<div class="logview-controls">
@@ -242,11 +242,11 @@
 						<button id="logview-goto-btn" class="logview-goto-btn" title="Go to line">🔍 Go To</button>
 						<input type="number" id="logview-goto-input" class="logview-goto-input" placeholder="Line number">
 						<button id="logview-copy-btn" class="logview-copy-btn">📋 Copy</button>
-						<button id="logview-wrap-btn" class="logview-wrap-btn" title="Toggle Word Wrap">📜 Wrap</button>
+						<button id="logview-wrap-btn" class="logview-wrap-btn" title="Toggle Word Wrap">📜 Word Wrap</button>
 					</div>
 
 					<!-- Status bar -->
-					<div id="logview-status" class="logview-status">Ready</div>
+					<div id="logview-status" class="logview-status">🟢 Ready and waiting...</div>
 
 					<!-- Log file viewport -->
 					<div id="logview-viewport" class="logview-viewport">
