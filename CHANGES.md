@@ -31,3 +31,23 @@
   - Updated the logic of `/api/search_logs_stream` endpoint
   - Remove the clear() call here - let the search loop handle clearing from `/api/abort_search` endpoint
   - Updated `searchToolFrontEnd.js` and frontend `index.html` for the Search tab functionality
+
+## Iteration: FrontendMemoryCleanup_v1  
+- Date: 2025-08-01  
+- Time: 06:52 AM (UTC+8)  
+
+### ✅ Changes Applied:
+- ✅ `mainFrontEnd.js`:
+  - Added `resetMainMemoryState()` to clear RQRS/error summary cache and DOM when switching tabs.
+
+- ✅ `searchToolFrontEnd.js`:
+  - Added `resetSearchToolMemory()` to clean up search results, summary text, and streaming `EventSource`.
+
+- ✅ `viewrawlogs.js`:
+  - Added global function `resetRawLogsMemory()` outside the `LogViewer` class to clear log lines and reset UI.
+  - Fixed a **SyntaxError** caused by misplacing `function` inside a class block.
+
+- ✅ `index.html`:
+  - Modified tab switch logic to safely call cleanup functions:
+    - `resetSearchToolMemory()` when leaving `Search Tools` tab
+    - `resetRawLogsMemory()` when leaving `Raw Logs` tab
