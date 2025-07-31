@@ -1,4 +1,4 @@
-// Main JS scripts
+// Main Frontend JS
 // Global variables
  let isDownloading = false;
  let abortRequested = false;
