@@ -838,9 +838,7 @@ async def health_check():
 
 @app.get("/list_logs")
 async def list_logs_endpoint():
-    # return {"logs": list_log_files()}
-    LOG_DIR = "./logs"
-    return {"logs": sorted(f for f in os.listdir(LOG_DIR) if os.path.isfile(os.path.join(LOG_DIR, f)))}
+    return {"logs": list_log_files()}
 
 @app.get("/scp_progress")
 async def scp_progress():
