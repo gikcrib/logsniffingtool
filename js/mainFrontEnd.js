@@ -24,6 +24,10 @@
 
 	// ✅ Memory reset function (safe frontend cleanup)
 	function resetMemoryState_MainFrontEnd() {
+	  
+	  // Resets log select
+	  fetchLogs();
+
 	  // Clear RQRS table and cache
 	  const rqrsTableBody = document.querySelector("#rqrsTable tbody");
 	  if (rqrsTableBody) rqrsTableBody.innerHTML = "";
