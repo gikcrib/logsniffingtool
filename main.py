@@ -1625,9 +1625,10 @@ async def refresh_cache():
 ################################
 # View Logs API Endpoints
 ################################
+
 @app.get("/api/logs/stream")
-async def stream_log_file(filename: str):
-    """Stream log file content as NDJSON"""
+async def stream_log_file(filename: str, request: Request):
+    """Stream log file content as NDJSON with optimizations for virtual scrolling"""
     file_path = Path(Config.LOG_DIR) / filename
     
     # Validate file exists and is accessible
@@ -1639,41 +1640,83 @@ async def stream_log_file(filename: str):
 
     async def generate():
         total_lines = 0
-        chunk_size = 1000  # lines per chunk
+        chunk_size = 50000  # Increased chunk size for better performance
         chunk = []
+        line_count = 0
         
+        # Get approximate line count first (for progress reporting)
         async with aiofiles.open(file_path, mode='r', encoding='utf-8', errors='ignore') as f:
-            # First send metadata
+            # First send metadata with estimated line count if possible
             yield json.dumps({
                 "filename": filename,
                 "size": file_path.stat().st_size,
                 "timestamp": datetime.now().isoformat(),
-                "type": "metadata"
+                "type": "metadata",
+                "estimated_lines": await estimate_line_count(f) if file_path.stat().st_size > 0 else 0
             }) + "\n\n"
+            
+            # Rewind file
+            await f.seek(0)
             
             # Stream lines
             async for line in f:
-                chunk.append(line.strip())
+                if request.client is None:  # Client disconnected
+                    break
+                    
+                chunk.append(line.rstrip())  # Use rstrip() instead of strip() to preserve indentation
+                line_count += 1
+                
                 if len(chunk) >= chunk_size:
-                    total_lines += len(chunk)
                     yield json.dumps({
                         "lines": chunk,
-                        "total_lines": total_lines,
+                        "total_lines": line_count,
                         "type": "chunk"
                     }) + "\n\n"
                     chunk = []
             
             # Send remaining lines
-            if chunk:
-                total_lines += len(chunk)
+            if chunk and request.client is not None:
                 yield json.dumps({
                     "lines": chunk,
-                    "total_lines": total_lines,
+                    "total_lines": line_count,
                     "type": "chunk"
                 }) + "\n\n"
 
-    return StreamingResponse(generate(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={
+            "X-Accel-Buffering": "no",  # Disable buffering for nginx if used
+            "Cache-Control": "no-store"  # Prevent caching of log data
+        }
+    )
 
+async def estimate_line_count(file_handle):
+    """Estimate line count by sampling beginning and end of file"""
+    try:
+        # Read first 10k and last 10k bytes to estimate line density
+        file_size = (await file_handle.seek(0, 2))  # Seek to end to get size
+        sample_size = min(10000, file_size)
+        
+        # Sample beginning
+        await file_handle.seek(0)
+        start_sample = await file_handle.read(sample_size)
+        start_lines = start_sample.count('\n')
+        
+        # Sample end
+        if file_size > sample_size:
+            await file_handle.seek(-sample_size, 2)
+            end_sample = await file_handle.read(sample_size)
+            end_lines = end_sample.count('\n')
+        else:
+            end_lines = start_lines
+            
+        # Calculate average lines per sample
+        avg_lines = (start_lines + end_lines) / 2
+        estimated_total = int((file_size / sample_size) * avg_lines)
+        return max(estimated_total, 1)
+    except:
+        return 0
 
 ################################
 # Monitoring Helper Functions

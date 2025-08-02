@@ -420,12 +420,45 @@ select:disabled option {
     height: 20px;
     border: 3px solid rgba(0,0,0,0.1);
     border-radius: 50%;
-    border-top-color: #4a6fa5;
+    border-top-color: var(--highlight);
     animation: spin 1s ease-in-out infinite;
     margin-left: 10px;
 }
+
 [data-theme="dark"] .loading-spinner {
   color: #eee;
+}
+
+[data-theme="dark"] .logview-line-number {
+    color: #aaa;
+    background-color: #2a2a2a;
+}
+
+[data-theme="dark"] .logview-line-highlight {
+    background-color: rgba(255, 255, 0, 0.2);
+}
+
+[data-theme="dark"] .logview-line-current {
+    background-color: rgba(0, 191, 255, 0.1) !important;
+}
+
+[data-theme="dark"] .search-match {
+    background-color: #ffcc00;
+    color: #000;
+}
+
+[data-theme="dark"] .progress-text {
+  color: #ccc;
+}
+
+[data-theme="dark"] {
+  --bg-color: #1e1e1e;
+  --text-color: #e0e0e0;
+  --highlight: #ffa500;
+  --border-color: #555;
+  --table-header: #2a2a2a;
+  --table-alt-row: #2c2c2c;
+  --tab-content: #1e1e1e;
 }
 
 .spinner {
@@ -461,9 +494,6 @@ select:disabled option {
   font-size: 0.85em;
   margin-top: 4px;
   color: #444;
-}
-[data-theme="dark"] .progress-text {
-  color: #ccc;
 }
 
 .modal-buttons {
@@ -811,15 +841,6 @@ pre, .xml-viewer {
   --table-alt-row: #e9f0f5;
 }
 
-[data-theme="dark"] {
-  --bg-color: #1e1e1e;
-  --text-color: #e0e0e0;
-  --highlight: #ffa500;
-  --border-color: #555;
-  --table-header: #2a2a2a;
-  --table-alt-row: #2c2c2c;
-  --tab-content: #1e1e1e;
-}
 
 /* 🔄 Refresh Button — match styling with theme button */
 #refreshPageBtn {
@@ -1272,52 +1293,72 @@ pre, .xml-viewer {
 .logview-viewport {
     width: 100%;
     height: 70vh;
-    overflow: auto;
-    white-space: nowrap;
-    border: 1px solid #ddd;
-    margin-top: 16px;
-    background-color: #f8f9fa;
+    overflow-x: auto;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-color);
     position: relative;
-    scroll-behavior: smooth;
+    scrollbar-width: auto; /* For Firefox */
+    -ms-overflow-style: auto; /* For IE and Edge */
 }
 
 .logview-content {
+    position: relative;
     font-family: 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 18px;
-    white-space: pre;
-    display: inline-block;
+    font-size: 0;
+    line-height: 0;
+    /*width: max-content;*/
     min-width: 100%;
+    contain: strict;
+}
+
+.logview-line-container {
+    position: absolute;
+    width: max-content;
+    line-height: 0;
+    font-size: 0;
 }
 
 .logview-line {
+    position: relative;
+    width: max-content;
+    min-width: 100%;
+    height: 18px;
+    display: flex;
     margin: 0;
     padding: 0;
-    min-height: 18px;
     line-height: 18px;
-    min-width: fit-content;
-    display: flex;
+    font-size: 14px;
+    overflow: visible;
+    transform: translateZ(0);
 }
 
 .logview-line-number {
+    position: sticky;
+    left: 0;
+    height: 18px;
     min-width: 60px;
     padding-right: 8px;
     text-align: left;
     color: #666;
-    background-color: #f0f0f0;
+    background-color: var(--table-alt-row);
     user-select: none;
     flex-shrink: 0;
+    line-height: 18px;
+    z-index: 1;
 }
 
 .logview-line-content {
+    height: 18px;
     padding-left: 8px;
-    white-space: pre;
-    word-break: break-all;
+    white-space: nowrap;
+    overflow: visible;
+    line-height: 18px;
     flex-grow: 1;
 }
 
 .logview-line-highlight {
-    background-color: #fffacd;
+    background-color: rgba(255, 255, 0, 0.3);
 }
 
 .logview-status {
@@ -1334,10 +1375,19 @@ pre, .xml-viewer {
 }
 
 .logview-loading {
-    padding: 20px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     text-align: center;
-    color: #666;
+    color: var(--text-color);
     font-size: 16px;
+    z-index: 10;
+}
+
+.logview-line + .logview-line {
+    margin-top: 0;
+    padding-top: 0;
 }
 
 /* Toast notification */
@@ -1430,8 +1480,16 @@ pre, .xml-viewer {
 }
 
 .logview-line-current {
-    background-color: #e6f7ff !important;
+    background-color: rgba(0, 191, 255, 0.2) !important;
     box-shadow: inset 3px 0 0 #1890ff;
+}
+
+.search-match {
+    background-color: #ff0;
+    color: #000;
+    font-weight: bold;
+    padding: 0 2px;
+    border-radius: 2px;
 }
 
 .logview-search-match {
@@ -1447,7 +1505,7 @@ pre, .xml-viewer {
     margin-right: 5px;
 }
 
-/* Word wrap button */
+/* LogView Tab Word Wrap - START */
 .logview-wrap-btn {
     padding: 8px 12px;
     margin: 0 4px;
@@ -1463,47 +1521,73 @@ pre, .xml-viewer {
     background-color: #5a6268;
 }
 
-/* Word wrap styles */
-#logview-viewport.wrap-enabled {
-    white-space: normal;
+/* Word wrap enabled state */
+.wrap-enabled .logview-viewport {
     overflow-x: hidden;
 }
 
-#logview-viewport.wrap-enabled #logview-content {
-    white-space: normal;
-    word-break: break-word;
+.wrap-enabled .logview-content {
+    width: 100%;
 }
 
-#logview-viewport.wrap-enabled .logview-line {
-    display: flex;
+.wrap-enabled .logview-line {
     white-space: pre-wrap;
-    margin: 0;
-    padding: 0;
+    word-break: break-word;
+    height: auto;
     min-height: 18px;
-    line-height: 18px;
+    align-items: flex-start;
 }
 
-#logview-viewport.wrap-enabled .logview-line-number {
-    flex: 0 0 60px;
-    text-align: left;
-    padding-right: 8px;
-    box-sizing: border-box;
-    background-color: inherit;
+.wrap-enabled .logview-line-number {
     position: sticky;
     left: 0;
+    height: auto;
+    align-self: flex-start;
+    background-color: inherit;
+    z-index: 1;
 }
 
-/* Line content styling */
-#logview-viewport.wrap-enabled .logview-line-content {
-    flex: 1;
+.wrap-enabled .logview-line-content {
     white-space: pre-wrap;
     word-break: break-word;
     overflow-wrap: anywhere;
+    min-width: 0;
 }
 
-/* Clear floats to prevent layout issues */
-#logview-viewport.wrap-enabled .logview-line:after {
-    content: "";
-    display: table;
-    clear: both;
+/* Ensure proper spacing between wrapped lines */
+.wrap-enabled .logview-line + .logview-line {
+    margin-top: 2px;
 }
+
+/* Fix for line highlighting in wrapped mode */
+.wrap-enabled .logview-line-highlight,
+.wrap-enabled .logview-line-current {
+    display: inline-flex;
+    width: 100%;
+}
+
+/* Fix search match highlighting */
+.wrap-enabled .search-match {
+    display: inline;
+    padding: 0 1px;
+    line-height: inherit;
+}
+
+/* LogView Tab Word Wrap - END */
+
+/* Custom scrollbar for log viewer */
+.logview-viewport::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.logview-viewport::-webkit-scrollbar-track {
+    background: var(--table-alt-row);
+}
+
+.logview-viewport::-webkit-scrollbar-thumb {
+    background-color: var(--highlight);
+    border-radius: 6px;
+    border: 3px solid var(--table-alt-row);
+}
+
