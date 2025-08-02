@@ -705,16 +705,6 @@ async function proceedWithDownload(clearExisting) {
    };
  }
  
- window.addEventListener("DOMContentLoaded", () => {
-   const themeBtn = document.getElementById("themeToggleBtn");
-   if (themeBtn) {
-	 themeBtn.addEventListener("click", () => {
-	   const currentTheme = document.documentElement.getAttribute("data-theme");
-	   const newTheme = currentTheme === "dark" ? "light" : "dark";
-	   document.documentElement.setAttribute("data-theme", newTheme);
-	 });
-   }
- 
    const openBtn = document.getElementById("openDownloadModalBtn");
    if (openBtn) {
 	 openBtn.addEventListener("click", () => {

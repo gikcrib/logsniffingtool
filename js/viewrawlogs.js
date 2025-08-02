@@ -22,9 +22,6 @@ class LogViewer {
         // Initialize UI elements first
         this.initUIElements();
         
-        // Then set up wrap state
-        this.updateWrapButtonState();
-        
         // Rest of initialization
         this.setupEventListeners();
         // this.refreshFileList();
@@ -41,7 +38,6 @@ class LogViewer {
         this.copyBtn = document.getElementById('logview-copy-btn');
         this.logViewport = document.getElementById('logview-viewport'); // This is critical
         this.statusBar = document.getElementById('logview-status');
-        this.wrapBtn = document.getElementById('logview-wrap-btn');
         this.wholeWordCheckbox = document.getElementById('logview-whole-word');
     }
 
@@ -77,7 +73,6 @@ class LogViewer {
         this.loadBtn.addEventListener('click', () => this.loadSelectedFile());
         this.searchBtn.addEventListener('click', () => this.performSearch());
         this.copyBtn.addEventListener('click', () => this.copySelectedText());
-        this.wrapBtn.addEventListener('click', () => this.toggleWordWrap());
 
         // Keyboard support
         this.searchInput.addEventListener('keypress', (e) => {
@@ -131,10 +126,6 @@ class LogViewer {
             if (e.key === 'F5') {
                 e.preventDefault();
                 this.cleanupMemory();
-            }
-            if (e.ctrlKey && e.key === 'w') {
-                e.preventDefault();
-                this.toggleWordWrap();
             }
         });
 
@@ -553,52 +544,6 @@ renderVisibleLines() {
         }
 
         this.scrollToLine(lineNumber);
-    }
-
-    updateWrapButtonState() {
-        if (!this.logViewport || !this.wrapBtn) return;
-        
-        if (this.wrapEnabled) {
-            this.logViewport.classList.add('wrap-enabled');
-            this.wrapBtn.textContent = '↩️ Undo Word Warp';
-            this.wrapBtn.classList.add('active');
-        } else {
-            this.logViewport.classList.remove('wrap-enabled');
-            this.wrapBtn.textContent = '📜 Word Wrap';
-            this.wrapBtn.classList.remove('active');
-        }
-    }
-
-    toggleWordWrap() {
-        this.wrapEnabled = !this.wrapEnabled;
-        this.updateWrapButtonState();
-        
-        // Toggle the CSS class on the viewport - this handles most styling
-        this.logViewport.classList.toggle('wrap-enabled', this.wrapEnabled);
-        
-        // Update status message
-        this.updateStatus(this.wrapEnabled 
-            ? `⏳ Word wrapping toggled and viewing is updated.`
-            : `↩️ Word wrapping toggled and set to default.`);
-        
-        // Force re-render of visible lines
-        if (window.rawLogLines.length > 0) {
-            this.renderVisibleLines();
-        }
-        
-        // Handle container adjustments
-        setTimeout(() => {
-            if (this.wrapEnabled) {
-                this.logContainer.style.height = 'auto';
-                this.logViewport.style.overflowX = 'hidden';
-            } else {
-                this.logContainer.style.height = `${this.totalLines * this.lineHeight}px`;
-                this.logViewport.style.overflowX = 'auto';
-            }
-            
-            // Fix any rendering glitches
-            this.adjustScrollAfterWrap();
-        }, 50);
     }
 
     adjustScrollAfterWrap() {
