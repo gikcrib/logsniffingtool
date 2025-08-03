@@ -314,21 +314,33 @@ function clearFilters() {
 }
 
 function applyRqrsFilters() {
-    const threadVal = document.getElementById("rqrsThreadFilter").value.toLowerCase();
-    const tagVal = document.getElementById("rqrsTagFilter").value.toLowerCase();
+    // Get filter values
+    const threadFilter = document.getElementById("rqrsThreadFilter").value.toLowerCase();
+    const serviceFilter = document.getElementById("rqrsServiceFilter").value.toLowerCase();
+    const tagFilter = document.getElementById("rqrsTagFilter").value.toLowerCase();
     const dlxChecked = document.getElementById("rqrsDlxCheckbox").checked;
     const errorChecked = document.getElementById("rqrsErrorCheckbox").checked;
 
-    document.querySelectorAll("#rqrsTable tbody tr").forEach(row => {
-        const threadText = row.children[1].textContent.toLowerCase();
-        const tagText = row.children[2].textContent.toLowerCase();
+    // Get all table rows
+    const rows = document.querySelectorAll("#rqrsTable tbody tr");
+    
+    rows.forEach(row => {
+        // Get cell values (note the column indexes)
+        const threadText = row.cells[1].textContent.toLowerCase(); // Thread ID (column 1)
+        const serviceText = row.cells[2].textContent.toLowerCase(); // Service (column 2)
+        const tagText = row.cells[3].textContent.toLowerCase(); // RQ/RS (column 3)
 
-        const matchThread = threadText.includes(threadVal);
-        const matchTag = tagText.includes(tagVal);
-        const matchDlx = !dlxChecked || tagText.startsWith("dlx_");
-        const matchError = !errorChecked || tagText.includes("⚠️");
+        // Apply all filter conditions
+        const matchesThread = threadText.includes(threadFilter);
+        const matchesService = serviceText.includes(serviceFilter);
+        const matchesTag = tagText.includes(tagFilter);
+        const matchesDlx = !dlxChecked || tagText.startsWith("dlx_");
+        const matchesError = !errorChecked || tagText.includes("⚠️");
 
-        row.style.display = (matchThread && matchTag && matchDlx && matchError) ? "" : "none";
+        // Show/hide row based on all conditions
+        row.style.display = (matchesThread && matchesService && matchesTag && matchesDlx && matchesError) 
+            ? "" 
+            : "none";
     });
 }
 
@@ -337,58 +349,124 @@ function applyRqrsFilters() {
 // =============================================
 
 async function fetchRQRS(log) {
-    const res = await fetch(`/get_rqrs?log=${encodeURIComponent(log)}`);
-    const data = await res.json();
-
-    window.rqrsCache = data.rqrs; // Cache for XML lookups
-
-    const rqrsTableBody = document.querySelector("#rqrsTable tbody");
-    rqrsTableBody.innerHTML = ""; // Clear old rows
-
-    if (!data.rqrs || data.rqrs.length === 0) {
-        const row = document.createElement("tr");
-        const td = document.createElement("td");
-        td.textContent = "No Data Found";
-        td.colSpan = 3;
-        td.style.textAlign = "center";
-        row.appendChild(td);
-        rqrsTableBody.appendChild(row);
-        return;
-    }
-
-    data.rqrs.forEach((entry, idx) => {
-        const line = entry.line ?? "??";
-        const thread = entry.thread ?? "UNKNOWN";
-        const tag = entry.tag ?? "???";
-
-        const tagCell = document.createElement("td");
-        const tagLink = document.createElement("a");
-        tagLink.href = "#";
-        tagLink.textContent = tag + (entry.has_issue ? " ⚠️" : "");
-        tagLink.onclick = () => {
-            fetchAndDisplayXMLForModal(log, idx, tag);
-            return false;
-        };
-
-        tagCell.appendChild(tagLink);
-        if (entry.has_issue) tagCell.classList.add("rqrs-warning");
-
-        const row = document.createElement("tr");
-        const lineCell = document.createElement("td");
-        lineCell.textContent = line;
-        const threadCell = document.createElement("td");
-        threadCell.textContent = thread;
-
-        row.appendChild(lineCell);
-        row.appendChild(threadCell);
-        row.appendChild(tagCell);
-        rqrsTableBody.appendChild(row);
-    });
-
-    if (data.rqrs && data.rqrs.length > 0) {
+    try {
+        // 1. Make the API request
+        const response = await fetch(`/get_rqrs?log=${encodeURIComponent(log)}`);
+        
+        // 2. Check if request failed
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status} ${response.statusText}`);
+        }
+        
+        // 3. Parse JSON data
+        const data = await response.json();
+        
+        // 4. Validate response structure
+        if (!data || !Array.isArray(data.rqrs)) {
+            throw new Error("Invalid data format from server");
+        }
+        
+        // 5. Store data in cache for later use
+        window.rqrsCache = data.rqrs;
+        
+        // 6. Get reference to table body
+        const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+        rqrsTableBody.innerHTML = ""; // Clear existing rows
+        
+        // 7. Handle empty results
+        if (data.rqrs.length === 0) {
+            const emptyRow = document.createElement("tr");
+            emptyRow.innerHTML = `
+                <td colspan="4" style="text-align: center; color: #666;">
+                    No RQ/RS entries found in this log file
+                </td>
+            `;
+            rqrsTableBody.appendChild(emptyRow);
+            return;
+        }
+        
+        // 8. Create table rows for each entry
+        data.rqrs.forEach((entry, index) => {
+            const row = document.createElement("tr");
+            
+            // Line Number column
+            const lineCell = document.createElement("td");
+            lineCell.textContent = entry.line || "??"; // Default if missing
+            lineCell.style.textAlign = "center"; // Right-align numbers
+            
+            // Thread ID column
+            const threadCell = document.createElement("td");
+            threadCell.textContent = entry.thread || "UNKNOWN";
+            
+            // Service column (new)
+            const serviceCell = document.createElement("td");
+            serviceCell.textContent = entry.service || "UNKNOWN";
+            
+            // XML Tag column (with clickable link)
+            const tagCell = document.createElement("td");
+            const tagLink = document.createElement("a");
+            tagLink.href = "#";
+            tagLink.textContent = (entry.tag || "???") + (entry.has_issue ? " ⚠️" : "");
+            tagLink.style.color = entry.has_issue ? "#d32f2f" : "#1976d2"; // Red for errors
+            tagLink.onclick = (e) => {
+                e.preventDefault();
+                fetchAndDisplayXMLForModal(log, index, entry.tag);
+            };
+            tagCell.appendChild(tagLink);
+            
+            // Add all cells to the row
+            row.appendChild(lineCell);
+            row.appendChild(threadCell);
+            row.appendChild(serviceCell);
+            row.appendChild(tagCell);
+            
+            // Add row to table
+            rqrsTableBody.appendChild(row);
+        });
+        
+        // 9. Enable filter controls if we have data
+        const filterControls = document.querySelectorAll(
+            "#rqrsFilterControls input, #rqrsClearFiltersBtn"
+        );
+        filterControls.forEach(control => {
+            control.disabled = false;
+        });
+        
+    } catch (error) {
+        console.error("Error loading RQ/RS data:", error);
+        
+        // Show error message in the table
+        const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+        rqrsTableBody.innerHTML = `
+            <tr>
+                <td colspan="4" style="color: red; text-align: center; padding: 20px;">
+                    Failed to load RQ/RS data: ${error.message}
+                    <br><small>Try refreshing the page or selecting a different log file</small>
+                </td>
+            </tr>
+        `;
+        
+        // Ensure filters stay disabled on error
         document.querySelectorAll("#rqrsFilterControls input, #rqrsClearFiltersBtn")
-            .forEach(el => el.disabled = false);
+            .forEach(el => el.disabled = true);
     }
+}
+
+// Helper function to extract service name from thread ID
+function extractServiceFromThread(thread) {
+    if (!thread) return "UNKNOWN";
+    
+    // This matches the backend's service extraction logic
+    const bracketedParts = thread.match(/\[([^\]]+)\]/g);
+    if (bracketedParts) {
+        for (let i = bracketedParts.length - 1; i >= 0; i--) {
+            const part = bracketedParts[i].slice(1, -1); // Remove brackets
+            if (part.includes('.')) {
+                return part.split('.').pop(); // Get last part after dot
+            }
+        }
+    }
+    return "UNKNOWN";
 }
 
 // =============================================
@@ -967,17 +1045,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // RQRS filters
     const threadFilter = document.getElementById("rqrsThreadFilter");
-    const dlxFilter = document.getElementById("rqrsDlxFilter");
-    const errorFilter = document.getElementById("rqrsErrorFilter");
+    const serviceFilter = document.getElementById("rqrsServiceFilter");
+    const tagFilter = document.getElementById("rqrsTagFilter");
+    const dlxFilter = document.getElementById("rqrsDlxCheckbox");  // Note: changed from rqrsDlxFilter
+    const errorFilter = document.getElementById("rqrsErrorCheckbox"); // Note: changed from rqrsErrorFilter
     const clearBtn = document.getElementById("rqrsClearFiltersBtn");
 
-    if (threadFilter && dlxFilter && errorFilter && clearBtn) {
+    if (threadFilter && serviceFilter && tagFilter && dlxFilter && errorFilter && clearBtn) {
         threadFilter.addEventListener("input", applyRqrsFilters);
+        serviceFilter.addEventListener("input", applyRqrsFilters);
+        tagFilter.addEventListener("input", applyRqrsFilters);
         dlxFilter.addEventListener("change", applyRqrsFilters);
         errorFilter.addEventListener("change", applyRqrsFilters);
 
         clearBtn.addEventListener("click", () => {
             threadFilter.value = "";
+            serviceFilter.value = "";
+            tagFilter.value = "";
             dlxFilter.checked = false;
             errorFilter.checked = false;
             applyRqrsFilters();
