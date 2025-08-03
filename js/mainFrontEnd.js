@@ -1,5 +1,10 @@
-// Main Frontend JS
-// Global variables
+// Main Frontend JS - Reorganized for Beginners
+
+// =============================================
+// 1. GLOBAL VARIABLES AND UTILITY FUNCTIONS
+// =============================================
+
+// Global state variables
 let isDownloading = false;
 let abortRequested = false;
 let controller = null;
@@ -8,6 +13,7 @@ let scpProgressSource = null;
 let scpSource = null;
 let pollingInterval = null;
 
+// Utility functions
 function escapeHTML(str) {
     return str.replace(/[&<>'"]/g, char => ({
         '&': '&amp;',
@@ -15,7 +21,7 @@ function escapeHTML(str) {
         '>': '&gt;',
         "'": '&#39;',
         '"': '&quot;'
-    } [char]));
+    }[char]));
 }
 
 function highlightLogLevel(log) {
@@ -26,7 +32,36 @@ function highlightLogLevel(log) {
         .replace(/\[FATAL\]/g, `<span style="background:red;color:white;">[FATAL]</span>`);
 }
 
-// ✅ Memory reset function (safe frontend cleanup)
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => {
+        toast.style.display = 'none';
+    }, 2000);
+}
+
+function formatXML(xml) {
+    const PADDING = '  ';
+    const reg = /(>)(<)(\/*)/g;
+    let formatted = '',
+        pad = 0;
+    xml = xml.replace(reg, '$1\r\n$2$3');
+    xml.split('\r\n').forEach(node => {
+        let indent = 0;
+        if (node.match(/.+<\/\w[^>]*>$/)) indent = 0;
+        else if (node.match(/^<\/\w/)) pad = pad > 0 ? pad - 1 : 0;
+        else if (node.match(/^<\w([^>]*[^/])?>.*$/)) indent = 1;
+        formatted += PADDING.repeat(pad) + node + '\r\n';
+        pad += indent;
+    });
+    return formatted;
+}
+
+// =============================================
+// 2. MEMORY MANAGEMENT AND RESET FUNCTIONS
+// =============================================
+
 function resetMemoryState_MainFrontEnd() {
     // Clear RQRS table and cache
     const rqrsTableBody = document.querySelector("#rqrsTable tbody");
@@ -58,19 +93,18 @@ function resetMemoryState_MainFrontEnd() {
     console.log("🧼 MainFrontEnd memory state cleaned up");
 }
 
-// ✅ Hook tab switch to trigger memory reset
-window.addEventListener("DOMContentLoaded", () => {
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            // Only reset when switching away from this tab
-            const activeTabId = btn.getAttribute('data-tab');
-            if (activeTabId !== 'error-tab' && activeTabId !== 'soap-tab') {
-                resetMemoryState_MainFrontEnd();
-            }
-        });
-    });
-});
+function resetErrorSummary() {
+    document.getElementById('fatalCount').textContent = '0';
+    document.getElementById('errorCount').textContent = '0';
+    document.getElementById('warnCount').textContent = '0';
+    document.getElementById('fatalBar').style.width = '0%';
+    document.getElementById('errorBar').style.width = '0%';
+    document.getElementById('warnBar').style.width = '0%';
+}
+
+// =============================================
+// 3. LOG FILE MANAGEMENT
+// =============================================
 
 async function fetchLogs() {
     const res = await fetch('/list_logs');
@@ -102,198 +136,41 @@ async function fetchLogs() {
     resetErrorSummary();
 }
 
-async function fetchRQRS(log) {
-
-    const res = await fetch(`/get_rqrs?log=${encodeURIComponent(log)}`);
-    const data = await res.json();
-
-    window.rqrsCache = data.rqrs; // ✅ Cache for XML lookups
-
-    // 🧩 Update table
-    const rqrsTableBody = document.querySelector("#rqrsTable tbody");
-    rqrsTableBody.innerHTML = ""; // Clear old rows
-
-    if (!data.rqrs || data.rqrs.length === 0) {
-        const row = document.createElement("tr");
-        const td = document.createElement("td");
-        td.textContent = "No Data Found";
-        td.colSpan = 3;
-        td.style.textAlign = "center";
-        row.appendChild(td);
-        rqrsTableBody.appendChild(row);
-        return;
-    }
-
-    data.rqrs.forEach((entry, idx) => {
-        const line = entry.line ?? "??";
-        const thread = entry.thread ?? "UNKNOWN";
-        const tag = entry.tag ?? "???";
-
-        // 🔗 Make tag clickable to show XML
-        const tagCell = document.createElement("td");
-        const tagLink = document.createElement("a");
-        tagLink.href = "#";
-        tagLink.textContent = tag + (entry.has_issue ? " ⚠️" : "");
-        tagLink.onclick = () => {
-            fetchAndDisplayXMLForModal(log, idx, tag);
-            return false;
-        };
-
-        tagCell.appendChild(tagLink);
-        if (entry.has_issue) tagCell.classList.add("rqrs-warning");
-
-        // 📄 Build table row
-        const row = document.createElement("tr");
-
-        const lineCell = document.createElement("td");
-        lineCell.textContent = line;
-
-        const threadCell = document.createElement("td");
-        threadCell.textContent = thread;
-
-        row.appendChild(lineCell);
-        row.appendChild(threadCell);
-        row.appendChild(tagCell);
-
-        rqrsTableBody.appendChild(row);
-    });
-
-    // ✅ Enable filters only if data exists
-    if (data.rqrs && data.rqrs.length > 0) {
-        document.querySelectorAll("#rqrsFilterControls input, #rqrsClearFiltersBtn")
-            .forEach(el => el.disabled = false);
-    }
-}
-
-function openLogContextModal(logFile, lineNumber) {
-    const modal = document.getElementById("logContextModal");
-    const content = document.getElementById("logContextText");
-
-    // Show loading message first (optional)
-    content.textContent = "⏳ Loading log context...";
-
-    fetch(`/log_context?log=${encodeURIComponent(logFile)}&line=${lineNumber}`)
-        .then(res => {
-            if (!res.ok) {
-                throw new Error("Log context fetch failed");
-            }
-            return res.json();
-        })
-        .then(data => {
-            content.textContent = data.lines.join("\n"); // Show the lines
-            modal.style.display = "flex"; // ✅ Show modal ONLY if successful
-        })
-        .catch(err => {
-            console.error("❌ Failed to load log context:", err);
-            alert("⚠️ Unable to fetch log context.");
-        });
-}
-
-// ✅ Filter RQRS Table Rows
-function applyRqrsFilters() {
-    const threadVal = document.getElementById("rqrsThreadFilter").value.toLowerCase();
-    const tagVal = document.getElementById("rqrsTagFilter").value.toLowerCase(); // <-- added
-    const dlxChecked = document.getElementById("rqrsDlxCheckbox").checked;
-    const errorChecked = document.getElementById("rqrsErrorCheckbox").checked;
-
-    document.querySelectorAll("#rqrsTable tbody tr").forEach(row => {
-        const threadText = row.children[1].textContent.toLowerCase();
-        const tagText = row.children[2].textContent.toLowerCase();
-
-        const matchThread = threadText.includes(threadVal);
-        const matchTag = tagText.includes(tagVal); // <-- added
-        const matchDlx = !dlxChecked || tagText.startsWith("dlx_");
-        const matchError = !errorChecked || tagText.includes("⚠️");
-
-        row.style.display = (matchThread && matchTag && matchDlx && matchError) ? "" : "none";
-    });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-    const threadFilter = document.getElementById("rqrsThreadFilter");
-    const tagFilter = document.getElementById("rqrsTagFilter");
-    const dlxCheckbox = document.getElementById("rqrsDlxCheckbox");
-    const errorCheckbox = document.getElementById("rqrsErrorCheckbox");
-    const clearBtn = document.getElementById("rqrsClearFiltersBtn");
-
-    function applyRqrsFilters() {
-        const threadVal = threadFilter?.value?.toLowerCase() || "";
-        const tagVal = tagFilter?.value?.toLowerCase() || "";
-        const dlxOnly = dlxCheckbox?.checked;
-        const errorOnly = errorCheckbox?.checked;
-
-        document.querySelectorAll("#rqrsTable tbody tr").forEach(row => {
-            const thread = row.children[1].textContent.toLowerCase();
-            const tag = row.children[2].textContent.toLowerCase();
-
-            const matchThread = thread.includes(threadVal);
-            const matchTag = tag.includes(tagVal);
-            const matchDlx = !dlxOnly || tag.startsWith("dlx_");
-            const matchError = !errorOnly || tag.includes("⚠️");
-
-            row.style.display = (matchThread && matchTag && matchDlx && matchError) ? "" : "none";
-        });
-    }
-
-    if (threadFilter) threadFilter.addEventListener("input", applyRqrsFilters);
-    if (tagFilter) tagFilter.addEventListener("input", applyRqrsFilters);
-    if (dlxCheckbox) dlxCheckbox.addEventListener("change", applyRqrsFilters);
-    if (errorCheckbox) errorCheckbox.addEventListener("change", applyRqrsFilters);
-
-    if (clearBtn) {
-        clearBtn.addEventListener("click", () => {
-            if (threadFilter) threadFilter.value = "";
-            if (tagFilter) tagFilter.value = "";
-            if (dlxCheckbox) dlxCheckbox.checked = false;
-            if (errorCheckbox) errorCheckbox.checked = false;
-            applyRqrsFilters();
-        });
-    }
-});
+// =============================================
+// 4. ERROR ANALYSIS FUNCTIONS
+// =============================================
 
 async function analyzeLogs() {
     const mode = document.querySelector('input[name="analyzeMode"]:checked').value;
     const logSelect = document.getElementById("logSelect");
     const selectedLog = logSelect ? logSelect.value : null;
 
-    // ✅ Check if the log list dropdown is empty (i.e., no logs available)
+    // Check if the log list dropdown is empty
     const logSelectOptions = logSelect ? Array.from(logSelect.options) : [];
     const hasLogFiles = logSelectOptions.length > 0;
 
-    // ✅ Show modal if NO log files exist — applies to both "specific" and "all" modes
     if (!hasLogFiles) {
-        showNoLogsModal(); // This function will open the new modal we created
+        showNoLogsModal();
         console.warn("🚫 No logs to analyze.");
         return;
     }
 
-
-    // 🔒 Block invalid request and show modal if no logs are found
     if (mode === "specific" && (!selectedLog || selectedLog === "")) {
         console.warn("🚫 Skipping analysis: no file selected.");
-        showNoLogsModal(); // 👈 NEW MODAL
-        return; // 🛑 Prevent accidental analysis
+        showNoLogsModal();
+        return;
     }
 
-    console.log("🧪 Sending analysis request:", {
-        mode,
-        log: selectedLog
-    });
+    console.log("🧪 Sending analysis request:", { mode, log: selectedLog });
     document.getElementById("analysisOverlay").style.display = "flex";
 
-    // ✅ Ensure rqrsPromise is visible in finally block
     let rqrsPromise = Promise.resolve();
 
     try {
         const res = await fetch("/analyze_logs", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                mode: mode,
-                log: selectedLog
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: mode, log: selectedLog })
         });
 
         let result;
@@ -305,22 +182,16 @@ async function analyzeLogs() {
 
         console.log("✅ Analysis result:", result);
 
-        // ✅ Handle edge case: "All Logs" mode returns empty results (no log files exist)
-        if (
-            mode === "all" &&
-            (!result.counts || (
-                (result.counts.FATAL || 0) === 0 &&
-                (result.counts.ERROR || 0) === 0 &&
-                (result.counts.WARN || 0) === 0
-            ))
-        ) {
-            showNoLogsModal(); // Show no errors found modal
+        if (mode === "all" && (!result.counts || (
+            (result.counts.FATAL || 0) === 0 &&
+            (result.counts.ERROR || 0) === 0 &&
+            (result.counts.WARN || 0) === 0
+        ))) {
+            showNoLogsModal();
             console.warn("🚫 No errors found from the logs to analyze (All Logs mode).");
             return;
         }
 
-
-        // ✅ Show error modal if backend sent an error message
         if (result.error) {
             showAnalysisErrorModal(result.error);
             return;
@@ -331,6 +202,7 @@ async function analyzeLogs() {
             return;
         }
 
+        // Update error counts and bars
         const counts = result.counts || {};
         document.getElementById("fatalCount").textContent = counts.FATAL || 0;
         document.getElementById("errorCount").textContent = counts.ERROR || 0;
@@ -342,15 +214,14 @@ async function analyzeLogs() {
         document.getElementById("errorBar").style.width = toPercent(counts.ERROR || 0);
         document.getElementById("warnBar").style.width = toPercent(counts.WARN || 0);
 
+        // Update error details table
         const tableBody = document.querySelector("#errorDetailsTable tbody");
         tableBody.innerHTML = "";
 
-        // 🔄 Clear filters when resetting table
         document.getElementById("threadFilter").value = "";
         document.getElementById("serviceFilter").value = "";
         applyFilters();
 
-        // ✅ Handle case where there are no error rows
         if ((result.errors || []).length === 0) {
             const tr = document.createElement("tr");
             const td = document.createElement("td");
@@ -375,7 +246,7 @@ async function analyzeLogs() {
                 lineLink.textContent = entry.line_number;
                 lineLink.onclick = () => {
                     openLogContextModal(entry.log_file, entry.line_number);
-                    return false; // prevent default jump
+                    return false;
                 };
                 lineCell.appendChild(lineLink);
 
@@ -392,22 +263,20 @@ async function analyzeLogs() {
             });
         }
 
-        // ✅ After error summary is updated, populate RQRS (only for specific mode)
+        // After error summary is updated, populate RQRS (only for specific mode)
         if (mode === "specific" && selectedLog) {
             rqrsPromise = fetchRQRS(selectedLog);
         } else {
-            // 🧩 Update table
             const rqrsTableBody = document.querySelector("#rqrsTable tbody");
-            rqrsTableBody.innerHTML = ""; // Clear old rows
+            rqrsTableBody.innerHTML = "";
         }
 
-        // ✅ Enable/Disable Filters + Clear Button Dynamically
+        // Enable/Disable Filters + Clear Button Dynamically
         const hasData = (result.errors || []).length > 0;
         document.getElementById("threadFilter").disabled = !hasData;
         document.getElementById("serviceFilter").disabled = !hasData;
         document.getElementById("clearFiltersBtn").disabled = !hasData;
 
-        // ✅ Enable/disable thread & service filters based on table rows
         const threadInput = document.getElementById("threadFilter");
         const serviceInput = document.getElementById("serviceFilter");
         const hasRows = tableBody.rows.length > 0;
@@ -424,31 +293,263 @@ async function analyzeLogs() {
     }
 }
 
-// ✅ Clear both filters and reapply table filtering
-document.getElementById("clearFiltersBtn").addEventListener("click", () => {
-    const threadInput = document.getElementById("threadFilter");
-    const serviceInput = document.getElementById("serviceFilter");
+// =============================================
+// 5. FILTER FUNCTIONS
+// =============================================
 
-    threadInput.value = "";
-    serviceInput.value = "";
+function applyFilters() {
+    const threadVal = document.getElementById('threadFilter').value.toLowerCase();
+    const serviceVal = document.getElementById('serviceFilter').value.toLowerCase();
+    document.querySelectorAll('#errorDetailsTable tbody tr').forEach(row => {
+        const thread = row.children[2].textContent.toLowerCase();
+        const service = row.children[3].textContent.toLowerCase();
+        row.style.display = (thread.includes(threadVal) && service.includes(serviceVal)) ? '' : 'none';
+    });
+}
 
-    applyFilters(); // ← this should already exist and do the actual table filtering
-});
+function clearFilters() {
+    document.getElementById('threadFilter').value = "";
+    document.getElementById('serviceFilter').value = "";
+    applyFilters();
+}
 
-// ✅ Show the "No Logs Found" modal
-function showNoLogsModal() {
-    const modal = document.getElementById("noLogsModal");
-    if (modal) {
-        modal.style.display = "flex";
+function applyRqrsFilters() {
+    const threadVal = document.getElementById("rqrsThreadFilter").value.toLowerCase();
+    const tagVal = document.getElementById("rqrsTagFilter").value.toLowerCase();
+    const dlxChecked = document.getElementById("rqrsDlxCheckbox").checked;
+    const errorChecked = document.getElementById("rqrsErrorCheckbox").checked;
+
+    document.querySelectorAll("#rqrsTable tbody tr").forEach(row => {
+        const threadText = row.children[1].textContent.toLowerCase();
+        const tagText = row.children[2].textContent.toLowerCase();
+
+        const matchThread = threadText.includes(threadVal);
+        const matchTag = tagText.includes(tagVal);
+        const matchDlx = !dlxChecked || tagText.startsWith("dlx_");
+        const matchError = !errorChecked || tagText.includes("⚠️");
+
+        row.style.display = (matchThread && matchTag && matchDlx && matchError) ? "" : "none";
+    });
+}
+
+// =============================================
+// 6. RQRS (Request/Response) FUNCTIONS
+// =============================================
+
+async function fetchRQRS(log) {
+    const res = await fetch(`/get_rqrs?log=${encodeURIComponent(log)}`);
+    const data = await res.json();
+
+    window.rqrsCache = data.rqrs; // Cache for XML lookups
+
+    const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+    rqrsTableBody.innerHTML = ""; // Clear old rows
+
+    if (!data.rqrs || data.rqrs.length === 0) {
+        const row = document.createElement("tr");
+        const td = document.createElement("td");
+        td.textContent = "No Data Found";
+        td.colSpan = 3;
+        td.style.textAlign = "center";
+        row.appendChild(td);
+        rqrsTableBody.appendChild(row);
+        return;
+    }
+
+    data.rqrs.forEach((entry, idx) => {
+        const line = entry.line ?? "??";
+        const thread = entry.thread ?? "UNKNOWN";
+        const tag = entry.tag ?? "???";
+
+        const tagCell = document.createElement("td");
+        const tagLink = document.createElement("a");
+        tagLink.href = "#";
+        tagLink.textContent = tag + (entry.has_issue ? " ⚠️" : "");
+        tagLink.onclick = () => {
+            fetchAndDisplayXMLForModal(log, idx, tag);
+            return false;
+        };
+
+        tagCell.appendChild(tagLink);
+        if (entry.has_issue) tagCell.classList.add("rqrs-warning");
+
+        const row = document.createElement("tr");
+        const lineCell = document.createElement("td");
+        lineCell.textContent = line;
+        const threadCell = document.createElement("td");
+        threadCell.textContent = thread;
+
+        row.appendChild(lineCell);
+        row.appendChild(threadCell);
+        row.appendChild(tagCell);
+        rqrsTableBody.appendChild(row);
+    });
+
+    if (data.rqrs && data.rqrs.length > 0) {
+        document.querySelectorAll("#rqrsFilterControls input, #rqrsClearFiltersBtn")
+            .forEach(el => el.disabled = false);
     }
 }
 
-// ✅ Hide the "No Logs Found" modal
-function closeNoLogsModal() {
-    const modal = document.getElementById("noLogsModal");
-    if (modal) {
-        modal.style.display = "none";
+// =============================================
+// 7. XML HANDLING FUNCTIONS
+// =============================================
+
+async function fetchAndDisplayXMLForModal(log, index, tag) {
+    const lineNumber = window.rqrsCache[index].line;
+    console.log("📨 Requesting XML content for:", { log, lineNumber, tag });
+    showLoadingXmlModal();
+
+    try {
+        const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&line_number=${lineNumber}&tag=${encodeURIComponent(tag)}`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("📦 Response data:", data);
+
+        if (!data.pretty_xml) {
+            throw new Error("No XML content in response");
+        }
+
+        const modal = document.getElementById("customXmlModal");
+        const title = document.getElementById("customModalTitle");
+        const content = document.getElementById("xmlContent");
+        const container = modal.querySelector(".custom-xml-container");
+
+        if (!modal || !title || !content || !container) {
+            throw new Error("Modal elements not found");
+        }
+
+        title.textContent = `📄 ${tag} (Line ${lineNumber})`;
+        content.textContent = data.pretty_xml;
+        modal.style.display = "flex";
+        content.style.display = "block";
+
+        if (window.hljs) {
+            hljs.highlightElement(content);
+        }
+
+        const footer = modal.querySelector(".custom-modal-footer");
+        if (footer) {
+            footer.innerHTML = `
+                <small class="text-muted">
+                    Lines ${data.actual_start_line} to ${data.actual_end_line} | 
+                    ${new Date().toLocaleString()}
+                </small>
+            `;
+        }
+
+        console.log("✅ XML displayed in UI");
+    } catch (err) {
+        console.error("❌ Error displaying XML:", err);
+        showToast(`❌ Failed to load XML from line ${lineNumber}`);
+    } finally {
+        hideLoadingXmlModal(500);
     }
+}
+
+function copyXmlContent() {
+    const xmlContent = document.getElementById('xmlContent');
+    const range = document.createRange();
+    range.selectNode(xmlContent);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            const copyBtn = document.querySelector('.custom-xml-copy-btn');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = '✓ Copied!';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }
+    } catch (err) {
+        console.error('Failed to copy: ', err);
+    }
+
+    window.getSelection().removeAllRanges();
+}
+
+function closeXmlModal() {
+    const modal = document.getElementById("customXmlModal");
+    const content = document.getElementById("xmlContent");
+
+    if (modal && content) {
+        modal.style.display = "none";
+        content.style.display = "none";
+        console.log("❎ Modal closed successfully");
+    } else {
+        console.warn("⚠️ Could not close modal — elements not found.");
+    }
+}
+
+function openXmlModal(tag, formattedXml) {
+    const modal = document.getElementById("customXmlModal");
+    const title = document.getElementById("customModalTitle");
+    const content = document.getElementById("xmlContent");
+    const container = modal.querySelector(".custom-xml-container");
+
+    if (!modal || !title || !content || !container) {
+        console.error("❌ openXmlModal: Modal DOM elements not found.");
+        return;
+    }
+
+    title.textContent = `📄 ${tag}`;
+    content.innerText = formattedXml;
+    modal.style.display = "flex";
+    content.style.display = "block";
+
+    console.log("📦 openXmlModal() triggered");
+}
+
+function showLoadingXmlModal() {
+    const modal = document.getElementById("loadingXmlModal");
+    if (modal) {
+        modal.style.display = "flex";
+        console.log("⏳ Showing loading XML modal...");
+    }
+}
+
+function hideLoadingXmlModal(afterMs = 10) {
+    setTimeout(() => {
+        const modal = document.getElementById("loadingXmlModal");
+        if (modal) {
+            modal.style.display = "none";
+            console.log("✅ Loading XML modal closed.");
+        }
+    }, afterMs);
+}
+
+// =============================================
+// 8. LOG CONTEXT FUNCTIONS
+// =============================================
+
+function openLogContextModal(logFile, lineNumber) {
+    const modal = document.getElementById("logContextModal");
+    const content = document.getElementById("logContextText");
+
+    content.textContent = "⏳ Loading log context...";
+
+    fetch(`/log_context?log=${encodeURIComponent(logFile)}&line=${lineNumber}`)
+        .then(res => {
+            if (!res.ok) {
+                throw new Error("Log context fetch failed");
+            }
+            return res.json();
+        })
+        .then(data => {
+            content.textContent = data.lines.join("\n");
+            modal.style.display = "flex";
+        })
+        .catch(err => {
+            console.error("❌ Failed to load log context:", err);
+            alert("⚠️ Unable to fetch log context.");
+        });
 }
 
 function closeLogContextModal() {
@@ -458,67 +559,9 @@ function closeLogContextModal() {
     content.textContent = "";
 }
 
-//////////////////////////////////
-
-function showAnalysisErrorModal(message) {
-    document.getElementById("analysisErrorMessage").textContent = message || "Unknown error occurred.";
-    const modal = document.getElementById("analysisErrorModal");
-    modal.classList.add("show");
-}
-
-function closeAnalysisErrorModal() {
-    const modal = document.getElementById("analysisErrorModal");
-    modal.classList.remove("show");
-}
-
-function updateSummary(data) {
-    const fatalCount = document.getElementById("fatalCount");
-    const errorCount = document.getElementById("errorCount");
-    const warnCount = document.getElementById("warnCount");
-
-    const fatalBar = document.getElementById("fatalBar");
-    const errorBar = document.getElementById("errorBar");
-    const warnBar = document.getElementById("warnBar");
-
-    let totalFatal = 0,
-        totalError = 0,
-        totalWarn = 0;
-
-    for (const counts of Object.values(data.errors || {})) {
-        totalFatal += counts.fatal;
-        totalError += counts.error;
-        totalWarn += counts.warn;
-    }
-
-    const total = totalFatal + totalError + totalWarn;
-
-    fatalCount.textContent = totalFatal;
-    errorCount.textContent = totalError;
-    warnCount.textContent = totalWarn;
-
-    // Set bar widths proportionally
-    fatalBar.style.width = total ? `${(totalFatal / total) * 100}%` : "0%";
-    errorBar.style.width = total ? `${(totalError / total) * 100}%` : "0%";
-    warnBar.style.width = total ? `${(totalWarn / total) * 100}%` : "0%";
-}
-
-function resetErrorSummary() {
-    document.getElementById('fatalCount').textContent = '0';
-    document.getElementById('errorCount').textContent = '0';
-    document.getElementById('warnCount').textContent = '0';
-    document.getElementById('fatalBar').style.width = '0%';
-    document.getElementById('errorBar').style.width = '0%';
-    document.getElementById('warnBar').style.width = '0%';
-}
-
-function showToast(message) {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.style.display = 'block';
-    setTimeout(() => {
-        toast.style.display = 'none';
-    }, 2000);
-}
+// =============================================
+// 9. REMOTE DOWNLOAD FUNCTIONS
+// =============================================
 
 function resetDownloadModal() {
     scpParams = {};
@@ -569,15 +612,9 @@ async function proceedWithDownload(clearExisting) {
     cancelBtn.disabled = false;
     cancelBtn.textContent = "Abort Download";
 
-    const {
-        host,
-        username,
-        path,
-        pattern
-    } = scpParams;
+    const { host, username, path, pattern } = scpParams;
 
     try {
-        // Start progress listener
         if (scpProgressSource) scpProgressSource.close();
         scpProgressSource = new EventSource("/scp_progress");
 
@@ -593,9 +630,7 @@ async function proceedWithDownload(clearExisting) {
 
         const res = await fetch("/download_remote_logs", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 host,
                 username,
@@ -655,12 +690,7 @@ async function handleRemoteLogDownload() {
     const cancelBtn = document.getElementById("cancelDownloadBtn");
     const spinner = downloadBtn.querySelector(".spinner");
     const btnText = downloadBtn.querySelector(".btn-text");
-    scpParams = {
-        host,
-        username,
-        path,
-        pattern
-    };
+    scpParams = { host, username, path, pattern };
 
     if (!host) {
         showToast("❌ Remote host alias is required.");
@@ -736,16 +766,60 @@ function showResultModal(message) {
     };
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-    // const themeBtn = document.getElementById("themeToggleBtn");
-    // if (themeBtn) {
-    //     themeBtn.addEventListener("click", () => {
-    //         const currentTheme = document.documentElement.getAttribute("data-theme");
-    //         const newTheme = currentTheme === "dark" ? "light" : "dark";
-    //         document.documentElement.setAttribute("data-theme", newTheme);
-    //     });
-    // }
+// =============================================
+// 10. MODAL FUNCTIONS
+// =============================================
 
+function showNoLogsModal() {
+    const modal = document.getElementById("noLogsModal");
+    if (modal) {
+        modal.style.display = "flex";
+    }
+}
+
+function closeNoLogsModal() {
+    const modal = document.getElementById("noLogsModal");
+    if (modal) {
+        modal.style.display = "none";
+    }
+}
+
+function showAnalysisErrorModal(message) {
+    document.getElementById("analysisErrorMessage").textContent = message || "Unknown error occurred.";
+    const modal = document.getElementById("analysisErrorModal");
+    modal.classList.add("show");
+}
+
+function closeAnalysisErrorModal() {
+    const modal = document.getElementById("analysisErrorModal");
+    modal.classList.remove("show");
+}
+
+function showAbortModal() {
+    document.getElementById("abortConfirmModal").style.display = "block";
+}
+
+function hideAbortModal() {
+    document.getElementById("abortConfirmModal").style.display = "none";
+}
+
+// =============================================
+// 11. EVENT LISTENERS AND INITIALIZATION
+// =============================================
+
+document.addEventListener("DOMContentLoaded", () => {
+    // Tab switch memory reset
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const activeTabId = btn.getAttribute('data-tab');
+            if (activeTabId !== 'error-tab' && activeTabId !== 'soap-tab') {
+                resetMemoryState_MainFrontEnd();
+            }
+        });
+    });
+
+    // Download modal controls
     const openBtn = document.getElementById("openDownloadModalBtn");
     if (openBtn) {
         openBtn.addEventListener("click", () => {
@@ -770,14 +844,11 @@ window.addEventListener("DOMContentLoaded", () => {
     if (abortYes) {
         abortYes.addEventListener("click", () => {
             if (controller) {
-                controller.abort(); // Cancels fetch
+                controller.abort();
                 abortRequested = true;
             }
 
-            // 🛠 This tells backend to kill the SCP subprocess
-            fetch("/abort_download", {
-                    method: "POST"
-                })
+            fetch("/abort_download", { method: "POST" })
                 .then(res => res.json())
                 .then(data => {
                     console.log("✅ Abort response from backend:", data);
@@ -806,10 +877,6 @@ window.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-
-    // fetchLogs();
-
-
     document.getElementById("confirmFinalDeleteYes").addEventListener("click", () => {
         document.getElementById("finalDeleteConfirmModal").style.display = "none";
         document.getElementById("downloadModal").style.display = "flex";
@@ -821,244 +888,7 @@ window.addEventListener("DOMContentLoaded", () => {
         document.getElementById("downloadModal").style.display = "none";
     });
 
-});
-
-async function fetchAndDisplayXML(log, index) {
-    try {
-        const res = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&entry=${index}`);
-        if (!res.ok) throw new Error("Failed to fetch XML");
-
-        const raw = await res.text();
-        if (!raw.trim()) {
-            console.log("⚠️ XML response is empty.");
-            throw new Error("Empty XML");
-        }
-
-        const match = raw.match(/<([a-zA-Z0-9:_-]+)(\s|>)/);
-        if (!match) {
-            console.log("❌ No valid XML root tag found.");
-            throw new Error("Malformed XML");
-        }
-
-        const rawXML = raw.slice(raw.indexOf(match[0])).trim();
-        const formatted = formatXML(rawXML);
-
-        const xmlDisplay = document.getElementById("xmlDisplay");
-        const xmlContainer = document.getElementById("xmlContent");
-
-        xmlDisplay.textContent = formatted;
-        xmlDisplay.style.display = "block";
-        xmlContainer.style.display = "block";
-
-        hljs.highlightElement(xmlDisplay);
-        console.log("✅ XML displayed in UI.");
-    } catch (err) {
-        showToast("❌ Failed to load XML.");
-    }
-}
-
-function formatXML(xml) {
-    const PADDING = '  ';
-    const reg = /(>)(<)(\/*)/g;
-    let formatted = '',
-        pad = 0;
-    xml = xml.replace(reg, '$1\r\n$2$3');
-    xml.split('\r\n').forEach(node => {
-        let indent = 0;
-        if (node.match(/.+<\/\w[^>]*>$/)) indent = 0;
-        else if (node.match(/^<\/\w/)) pad = pad > 0 ? pad - 1 : 0;
-        else if (node.match(/^<\w([^>]*[^/])?>.*$/)) indent = 1;
-        formatted += PADDING.repeat(pad) + node + '\r\n';
-        pad += indent;
-    });
-    return formatted;
-}
-
-document.getElementById('threadFilter').addEventListener('input', applyFilters);
-document.getElementById('serviceFilter').addEventListener('input', applyFilters);
-
-function applyFilters() {
-    const threadVal = document.getElementById('threadFilter').value.toLowerCase();
-    const serviceVal = document.getElementById('serviceFilter').value.toLowerCase();
-    document.querySelectorAll('#errorDetailsTable tbody tr').forEach(row => {
-        const thread = row.children[2].textContent.toLowerCase();
-        const service = row.children[3].textContent.toLowerCase();
-        row.style.display = (thread.includes(threadVal) && service.includes(serviceVal)) ? '' : 'none';
-    });
-}
-
-// 🧹 Clears both filter inputs and resets table
-function clearFilters() {
-    document.getElementById('threadFilter').value = "";
-    document.getElementById('serviceFilter').value = "";
-    applyFilters();
-}
-
-////////////////////////////////////////////
-// SCP functions - Progress bar
-////////////////////////////////////////////
-function startScpProgressPolling() {
-    scpSource = new EventSource("/scp_progress");
-    scpSource.onmessage = function(event) {
-        const progress = JSON.parse(event.data);
-        const percent = progress.percent;
-        const eta = progress.eta;
-        $("#scp-progress-bar").css("width", percent + "%").attr("aria-valuenow", percent);
-        $("#scp-progress-text").text(`${percent}% | ETA: ${eta}s`);
-        if (percent >= 100 && scpSource) {
-            scpSource.close();
-            $("#scp-modal").modal("hide");
-            alert("✅ Download complete.");
-        }
-    };
-}
-
-////////////////////////////////////////////
-// SCP functions - Downloading files
-////////////////////////////////////////////
-function downloadLogs() {
-    const host = $("#scp-host").val();
-    const pattern = $("#scp-pattern").val() || "matrixtdp4.log*";
-    const clearExisting = $("#scp-clear-existing").is(":checked");
-
-    $("#scp-progress-bar").css("width", "0%").attr("aria-valuenow", 0);
-    $("#scp-progress-text").text("0% | ETA: ∞");
-    $("#scp-modal").modal("show");
-
-    fetch("/download_remote_logs", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                host,
-                pattern,
-                clear_existing: clearExisting
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === "error") {
-                $("#scp-modal").modal("hide");
-                alert("❌ Download failed: " + data.message);
-            } else {
-                console.log("✅ Download request accepted.");
-            }
-        });
-
-    startScpProgressPolling();
-}
-
-////////////////////////////////////////////
-// SCP functions - Aborting download
-////////////////////////////////////////////
-function abortDownload() {
-    console.log("⚠️ UI: Sending abort_download fetch...");
-    fetch("/abort_download", {
-            method: "POST"
-        })
-        .then(res => res.json())
-        .then(data => {
-            alert("🚫 Abort sent.");
-            if (scpSource) {
-                scpSource.close();
-            }
-            $("#scp-modal").modal("hide");
-        });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-    const scpModal = document.getElementById('scp-modal');
-    if (!scpModal) return;
-
-    const observer = new MutationObserver(() => {
-        const isHidden = scpModal.classList.contains("hidden") || scpModal.style.display === "none";
-        if (isHidden) {
-            console.log("🔁 SCP modal closed. Reloading page...");
-            location.reload(true); // Force hard reload
-        }
-    });
-
-    observer.observe(scpModal, {
-        attributes: true,
-        attributeFilter: ['class', 'style']
-    });
-});
-
-// Show or hide the Abort modal
-function showAbortModal() {
-    document.getElementById("abortConfirmModal").style.display = "block";
-}
-
-function hideAbortModal() {
-    document.getElementById("abortConfirmModal").style.display = "none";
-}
-
-// Bind YES button (user confirmed abort)
-document.addEventListener("DOMContentLoaded", () => {
-    const confirmAbortYesBtn = document.getElementById("confirmAbortYes");
-    if (!confirmAbortYesBtn) {
-        console.warn("⚠️ confirmAbortYes button not found in DOM.");
-        return;
-    }
-
-    confirmAbortYesBtn.addEventListener("click", async function() {
-        console.log("⚠️ UI: User confirmed abort. Sending /abort_download to backend…");
-
-        try {
-            const res = await fetch("/abort_download", {
-                method: "POST"
-            });
-            const data = await res.json();
-
-            console.log("✅ Backend response:", data);
-            showToast("🚫 Download aborted.");
-        } catch (err) {
-            console.error("❌ Failed to abort download:", err);
-            showToast("❌ Failed to abort SCP.");
-        }
-
-        // Cleanup UI
-        hideAbortModal();
-        document.getElementById("downloadModal").style.display = "none";
-        document.getElementById("downloadProgressWrapper").style.display = "none";
-        document.getElementById("downloadSpinner").style.display = "none";
-        document.getElementById("downloadModal").dataset.state = "idle";
-        document.getElementById("cancelDownloadBtn").textContent = "Close Window";
-
-        if (scpProgressSource) {
-            scpProgressSource.close();
-            scpProgressSource = null;
-        }
-
-        if (scpSource) {
-            scpSource.close();
-            scpSource = null;
-        }
-
-        isDownloading = false;
-        abortRequested = true;
-        controller = null;
-    });
-});
-
-// Bind NO button (user canceled abort)
-document.addEventListener("DOMContentLoaded", () => {
-    const abortNoBtn = document.getElementById("confirmAbortNo");
-    if (!abortNoBtn) {
-        console.warn("⚠️ confirmAbortNo button not found.");
-        return;
-    }
-
-    abortNoBtn.addEventListener("click", function() {
-        hideAbortModal();
-    });
-});
-////////////////////////////////////////////
-// SCP functions - Aborting download (END)
-////////////////////////////////////////////
-
-document.addEventListener("DOMContentLoaded", () => {
+    // Log analysis controls
     const logSelect = document.getElementById("logSelect");
     const modeRadios = document.getElementsByName("analyzeMode");
     const analyzeBtn = document.getElementById("startAnalysisBtn");
@@ -1072,12 +902,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // Bind mode change to toggle the dropdown state
     modeRadios.forEach(radio => {
         radio.addEventListener("change", updateLogSelectState);
     });
 
-    // Set correct initial state
     updateLogSelectState();
 
     document.getElementById("startAnalysisBtn").addEventListener("click", analyzeLogs);
@@ -1087,7 +915,7 @@ document.addEventListener("DOMContentLoaded", () => {
         fetchLogs();
     });
 
-    // Start of table sorting logic under Detailed Error Breakdown
+    // Table sorting
     document.querySelectorAll("#errorDetailsTable th.sortable").forEach((th, index) => {
         let ascending = true;
 
@@ -1096,7 +924,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const tbody = table.querySelector("tbody");
             const rows = Array.from(tbody.querySelectorAll("tr"));
 
-            // Reset other columns' arrows
             table.querySelectorAll("th.sortable").forEach(header => {
                 if (header !== th) header.classList.remove("asc", "desc");
             });
@@ -1105,7 +932,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 let valA = a.children[index].textContent.trim();
                 let valB = b.children[index].textContent.trim();
 
-                // 🧠 If sorting the Error Message column (index 4), remove timestamp
                 if (index === 4) {
                     const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d+\s+/;
                     valA = valA.replace(timestampPattern, "");
@@ -1115,12 +941,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 const numA = parseFloat(valA);
                 const numB = parseFloat(valB);
 
-                // 🧮 Sort numbers if both are numbers
                 if (!isNaN(numA) && !isNaN(numB)) {
                     return ascending ? numA - numB : numB - numA;
                 }
 
-                // 🔤 Fallback to text sort
                 return ascending ?
                     valA.localeCompare(valB, undefined, {
                         numeric: true,
@@ -1140,273 +964,31 @@ document.addEventListener("DOMContentLoaded", () => {
             ascending = !ascending;
         });
     });
-    // END of table sorting logic under Detailed Error Breakdown
 
-    document.addEventListener("DOMContentLoaded", () => {
-        const threadFilter = document.getElementById("rqrsThreadFilter");
-        const dlxFilter = document.getElementById("rqrsDlxFilter");
-        const errorFilter = document.getElementById("rqrsErrorFilter");
-        const clearBtn = document.getElementById("rqrsClearFiltersBtn");
+    // RQRS filters
+    const threadFilter = document.getElementById("rqrsThreadFilter");
+    const dlxFilter = document.getElementById("rqrsDlxFilter");
+    const errorFilter = document.getElementById("rqrsErrorFilter");
+    const clearBtn = document.getElementById("rqrsClearFiltersBtn");
 
-        if (threadFilter && dlxFilter && errorFilter && clearBtn) {
-            threadFilter.addEventListener("input", applyRqrsFilters);
-            dlxFilter.addEventListener("change", applyRqrsFilters);
-            errorFilter.addEventListener("change", applyRqrsFilters);
+    if (threadFilter && dlxFilter && errorFilter && clearBtn) {
+        threadFilter.addEventListener("input", applyRqrsFilters);
+        dlxFilter.addEventListener("change", applyRqrsFilters);
+        errorFilter.addEventListener("change", applyRqrsFilters);
 
-            clearBtn.addEventListener("click", () => {
-                threadFilter.value = "";
-                dlxFilter.checked = false;
-                errorFilter.checked = false;
-                applyRqrsFilters();
-            });
-        }
-    });
+        clearBtn.addEventListener("click", () => {
+            threadFilter.value = "";
+            dlxFilter.checked = false;
+            errorFilter.checked = false;
+            applyRqrsFilters();
+        });
+    }
 
+    // Regular filters
+    document.getElementById('threadFilter').addEventListener('input', applyFilters);
+    document.getElementById('serviceFilter').addEventListener('input', applyFilters);
+    document.getElementById("clearFiltersBtn").addEventListener("click", clearFilters);
+
+    // Initial fetch
     setTimeout(fetchLogs, 0);
-});
-///////////////////////////////////////////
-// RQ RS clickable
-//////////////////////////////////////////
-function openRqrsXmlModal(tagName, xmlContent) {
-    const modal = document.getElementById("rqrsXmlModal");
-    const title = document.getElementById("rqrsXmlTitle");
-    const content = document.getElementById("rqrsXmlContent");
-
-    title.textContent = `🧩 ${tagName}`;
-    content.textContent = xmlContent;
-    modal.style.display = "flex";
-}
-
-function closeRqrsXmlModal() {
-    document.getElementById("rqrsXmlModal").style.display = "none";
-}
-
-// ✅ Fetches XML from backend using actual line numbers
-async function fetchAndDisplayXMLForModal(log, index, tag) {
-    // Get the actual line number from your cached data
-    const lineNumber = window.rqrsCache[index].line;
-    console.log("📨 Requesting XML content for:", {
-        log,
-        lineNumber,
-        tag
-    });
-    showLoadingXmlModal();
-
-    try {
-        // Changed from 'index' to 'line_number' parameter
-        const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&line_number=${lineNumber}&tag=${encodeURIComponent(tag)}`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log("📦 Response data:", data);
-
-        if (!data.pretty_xml) {
-            throw new Error("No XML content in response");
-        }
-
-        const modal = document.getElementById("customXmlModal");
-        const title = document.getElementById("customModalTitle");
-        const content = document.getElementById("xmlContent");
-        const container = modal.querySelector(".custom-xml-container");
-
-        if (!modal || !title || !content || !container) {
-            throw new Error("Modal elements not found");
-        }
-
-        // Update title to show line number
-        title.textContent = `📄 ${tag} (Line ${lineNumber})`;
-        content.textContent = data.pretty_xml;
-        modal.style.display = "flex";
-        content.style.display = "block";
-
-        // Apply syntax highlighting if using highlight.js
-        if (window.hljs) {
-            hljs.highlightElement(content);
-        }
-
-        // Add line number info to modal footer
-        const footer = modal.querySelector(".custom-modal-footer");
-        if (footer) {
-            footer.innerHTML = `
-        <small class="text-muted">
-          Lines ${data.actual_start_line} to ${data.actual_end_line} | 
-          ${new Date().toLocaleString()}
-        </small>
-      `;
-        }
-
-        console.log("✅ XML displayed in UI");
-    } catch (err) {
-        console.error("❌ Error displaying XML:", err);
-        showToast(`❌ Failed to load XML from line ${lineNumber}`);
-    } finally {
-        hideLoadingXmlModal(500);
-    }
-}
-
-function copyXmlContent() {
-    // Get the XML content element
-    const xmlContent = document.getElementById('xmlContent');
-
-    // Create a range and select the text
-    const range = document.createRange();
-    range.selectNode(xmlContent);
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(range);
-
-    // Copy the selected text
-    try {
-        const successful = document.execCommand('copy');
-        if (successful) {
-            // Temporarily change button text to show success
-            const copyBtn = document.querySelector('.custom-xml-copy-btn');
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = '✓ Copied!';
-
-            // Revert after 2 seconds
-            setTimeout(() => {
-                copyBtn.textContent = originalText;
-            }, 2000);
-        }
-    } catch (err) {
-        console.error('Failed to copy: ', err);
-    }
-
-    // Clean up
-    window.getSelection().removeAllRanges();
-}
-
-// ✅ Closes the custom XML modal window safely
-function closeXmlModal() {
-    // 🔍 Get the modal element by its ID (this is the dark background wrapper)
-    const modal = document.getElementById("customXmlModal");
-
-    // 🔍 Get the content element where the XML text is shown
-    const content = document.getElementById("xmlContent");
-
-    // ✅ Make sure both elements exist before changing anything
-    if (modal && content) {
-        // 🚫 Hide the modal by setting its display style to "none"
-        modal.style.display = "none";
-
-        // 🚫 Also hide the XML content area
-        content.style.display = "none";
-
-        // 🐞 Show a debug message to confirm it closed successfully
-        console.log("❎ Modal closed successfully");
-    } else {
-        // ⚠️ If something went wrong (e.g. element not found), log a warning
-        console.warn("⚠️ Could not close modal — elements not found.");
-    }
-}
-
-
-// ✅ Opens the new custom XML modal (called by fetchAndDisplayXMLForModal or manually)
-function openXmlModal(tag, formattedXml) {
-    // 🔍 Get the outer modal container (dark background)
-    const modal = document.getElementById("customXmlModal");
-
-    // 🔍 Get the title element inside the modal
-    const title = document.getElementById("customModalTitle");
-
-    // 🔍 Get the <pre> element where the XML will be shown
-    const content = document.getElementById("xmlContent");
-
-    // 🔍 Get the inner container div (holds title, button, content)
-    const container = modal.querySelector(".custom-xml-container");
-
-    // ✅ Make sure all elements are found before continuing
-    if (!modal || !title || !content || !container) {
-        // ❌ Show error if any part of the modal is missing
-        console.error("❌ openXmlModal: Modal DOM elements not found.");
-        return;
-    }
-
-    // ✅ Set the title text at the top of the modal (e.g. 📄 DLX_AirAvailSvRQ)
-    title.textContent = `📄 ${tag}`;
-
-    // ✅ Display the XML content inside the <pre> tag as plain text
-    content.innerText = formattedXml;
-
-    // ✅ Show the modal by setting its style to flex (was hidden by default)
-    modal.style.display = "flex";
-
-    // ✅ Ensure the content block inside the modal is also visible
-    content.style.display = "block";
-
-    // 🐞 DEBUG LOGGING — Confirm modal is opening and show classes used
-    console.log("📦 openXmlModal() triggered");
-    console.log("[DEBUG] Modal element class:", modal.className);
-    console.log("[DEBUG] Container element class:", container.className);
-    console.log("[DEBUG] Title element class:", title.className);
-    console.log("[DEBUG] Content element class:", content.className);
-
-    // 🐞 DEBUG LOGGING — Show active styles for modal and content
-    console.log("[DEBUG] Modal display:", getComputedStyle(modal).display);
-    console.log("[DEBUG] Modal background:", getComputedStyle(modal).backgroundColor);
-    console.log("[DEBUG] Container box shadow:", getComputedStyle(container).boxShadow);
-    console.log("[DEBUG] XML Content font:", getComputedStyle(content).fontFamily);
-    console.log("[DEBUG] XML Content font size:", getComputedStyle(content).fontSize);
-}
-
-// 🕐 Show the loading modal while fetching SOAP XML
-function showLoadingXmlModal() {
-    const modal = document.getElementById("loadingXmlModal");
-    if (modal) {
-        modal.style.display = "flex";
-        console.log("⏳ Showing loading XML modal...");
-    }
-}
-
-// ✅ Hide the loading modal after a delay
-function hideLoadingXmlModal(afterMs = 10) {
-    setTimeout(() => {
-        const modal = document.getElementById("loadingXmlModal");
-        if (modal) {
-            modal.style.display = "none";
-            console.log("✅ Loading XML modal closed.");
-        }
-    }, afterMs);
-}
-
-// ✅ Wait for the full HTML page to finish loading before attaching any event listeners
-document.addEventListener("DOMContentLoaded", function() {
-    // 🔄 Get the "Refresh" button by its ID
-    const refreshBtn = document.getElementById("refreshPageBtn");
-    const confirmBtn = document.getElementById("confirmRefreshBtn");
-    const cancelBtn = document.getElementById("cancelRefreshBtn");
-    const modal = document.getElementById("refreshConfirmModal");
-
-    // ✅ Check if all required elements exist before setting up event handlers
-    if (refreshBtn && modal) {
-        // When the user clicks the Refresh icon button
-        refreshBtn.addEventListener("click", () => {
-            modal.style.display = "flex"; // Show the confirmation modal
-        });
-    } else {
-        console.warn("⚠️ Refresh button or modal not found in the DOM.");
-    }
-
-    // 🔄 If user confirms "Yes, refresh"
-    if (confirmBtn) {
-        confirmBtn.addEventListener("click", () => {
-            location.reload(); // ✅ Reload the entire page
-        });
-    } else {
-        console.warn("⚠️ Confirm button not found in the DOM.");
-    }
-
-    // ❌ If user cancels
-    if (cancelBtn) {
-        cancelBtn.addEventListener("click", () => {
-            if (modal) {
-                modal.style.display = "none"; // ✅ Hide the modal if cancel is clicked
-            }
-        });
-    } else {
-        console.warn("⚠️ Cancel button not found in the DOM.");
-    }
 });
