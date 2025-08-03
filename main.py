@@ -396,6 +396,8 @@ async def parse_log_file(log: str) -> Dict[str, Any]:
     entries = []
     line_number = 0
     last_timestamp = ""
+    last_service = "UNKNOWN"  # Initialize this
+    previous_line = ""  # Initialize this
 
     try:
         async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -406,33 +408,36 @@ async def parse_log_file(log: str) -> Dict[str, Any]:
                 if not stripped:
                     continue
 
-                # Check for timestamp
+                # Check for timestamp - SINGLE CHECK (removed duplicate)
                 if Patterns.TIMESTAMP.match(stripped):
                     last_timestamp = stripped
+                    previous_line = stripped
+                    last_service = extract_service(stripped)  # Update service here
                     continue
 
                 # Check for XML
                 if match := Patterns.RQRS.search(stripped):
                     source_line = last_timestamp if last_timestamp else stripped
-                    service_name = extract_service(source_line)
+                    logger.debug(f"Line Number: {line_number}")
+                    logger.debug(f"Thread ID: {extract_thread_id(source_line)}")
+                    logger.debug(f"Service: {last_service}")
+                    logger.debug(f"XML Tag: {match.group(1)}")
                     entries.append({
-                        "line": line_number,  # Frontend expects "line"
-                        "thread": extract_thread_id(source_line),  # "thread" not "thread_id"
-                        "tag": match.group(1),  # Frontend expects "tag" not "service"
-                        "raw": stripped,  # Required for XML modal
-                        "has_issue": bool(Patterns.XML_ERRORS.search(stripped))  # For warning icon
+                        "line": line_number,
+                        "thread": extract_thread_id(source_line),
+                        "service": last_service,  # Use the stored service
+                        "tag": match.group(1),
+                        "raw": stripped,
+                        "has_issue": bool(Patterns.XML_ERRORS.search(stripped))
                     })
                     last_timestamp = ""
 
-        logger.info(f"✅ Final Results: Parsed {line_number} lines. Found {len(entries)} entries")
-        # Structure exactly matches frontend expectations
-        return {
-            "rqrs": entries  # Frontend looks for "rqrs" array
-        }
+        logger.info(f"Parsed {line_number} lines. Found {len(entries)} RQ/RS entries")
+        return {"rqrs": entries}
 
     except Exception as e:
-        logger.error(f"Parse error: {str(e)}")
-        raise HTTPException(500, detail="Log processing error")
+        logger.error(f"Parse error in {log}: {str(e)}", exc_info=True)
+        raise HTTPException(500, detail=f"Log processing error: {str(e)}")
 
 async def async_preload_logs():
     """Optimized log preloading that processes all files regardless of size"""
