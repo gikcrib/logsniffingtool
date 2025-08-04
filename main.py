@@ -1436,9 +1436,10 @@ async def search_logs_stream(req: SearchRequest):
 
                 total_files_scanned += 1
                 file_has_matches = False  
-                section_buffer = []
+                current_entry = []  # Buffer for current log entry
                 current_thread = "UNKNOWN"
                 current_service = "UNKNOWN"
+                in_entry = False  # Flag to track if we're inside a log entry
 
                 try:
                     with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -1452,30 +1453,36 @@ async def search_logs_stream(req: SearchRequest):
                             
                             line = line.rstrip('\n')
                             
+                            # Check for timestamp line (start of new entry)
                             if Patterns.TIMESTAMP.match(line):
-                                section_buffer = [line]
+                                # If we were in an entry and it had a match, send it
+                                if in_entry and file_has_matches:
+                                    snippet = '\n'.join(current_entry)
+                                    data = {
+                                        "log_file": fname,
+                                        "line_number": line_idx + 1 - len(current_entry),  # Start line of entry
+                                        "thread_id": current_thread,
+                                        "service": current_service,
+                                        "snippet": snippet
+                                    }
+                                    yield f'data: {json.dumps(data)}\n\n'
+                                
+                                # Start new entry
+                                current_entry = [line]
+                                in_entry = True
                                 current_thread = extract_thread_id(line)
                                 current_service = extract_service(line)
-                            else:
-                                section_buffer.append(line)
-
-                            if re.search(re.escape(search_text), line, re.IGNORECASE):
+                                file_has_matches = False  # Reset for new entry
+                            elif in_entry:
+                                current_entry.append(line)
+                            
+                            # Check for search text match
+                            if in_entry and re.search(re.escape(search_text), line, re.IGNORECASE):
                                 if not file_has_matches:
                                     files_with_matches.add(fname)
                                     file_has_matches = True
-                                    print(f"[Match Found] File: {fname}")
-
+                                    print(f"✅ [Match Found] File: {fname}")
                                 total_occurrences += 1
-                                snippet = line if Patterns.TIMESTAMP.match(line) else '\n'.join(section_buffer)
-                                
-                                data = {
-                                    "log_file": fname,
-                                    "line_number": line_idx + 1,
-                                    "thread_id": current_thread,
-                                    "service": current_service,
-                                    "snippet": snippet
-                                }
-                                yield f'data: {json.dumps(data)}\n\n'
 
                 except Exception as e:
                     logger.error(f"🔴 [File Processing Error] {fname}: {str(e)}")
@@ -1485,11 +1492,11 @@ async def search_logs_stream(req: SearchRequest):
             if not GlobalState.abort_event.is_set():
                 yield f'data: {{"files_scanned": {total_files_scanned}}}\n\n'
                 elapsed = time.time() - start_time
-                print(f"\n[Search Completed] {time.strftime('%H:%M:%S', time.localtime())}")
-                print(f"  Files scanned: {total_files_scanned}")
-                print(f"  Files with matches: {len(files_with_matches)}")
-                print(f"  Total occurrences: {total_occurrences}")
-                print(f"  Elapsed time: {elapsed:.2f} seconds")
+                print(f"\n🔍 [Search Completed] {time.strftime('%H:%M:%S', time.localtime())}")
+                print(f"  🔍 Files scanned: {total_files_scanned}")
+                print(f"  📂 Files with matches: {len(files_with_matches)}")
+                print(f"  ✔️ Total occurrences: {total_occurrences}")
+                print(f"  🕒 Elapsed time: {elapsed:.2f} seconds")
 
                 yield f'data: {json.dumps({"status": "complete", "code": 200, "files_scanned": total_files_scanned, "file_matches": len(files_with_matches), "total_occurrences": total_occurrences, "elapsed_time": round(elapsed, 2)})}\n\n'
 
@@ -1524,7 +1531,7 @@ async def list_log_files_with_metadata():
     This is the comprehensive version that was in the original code
     """
     try:
-        logger.info("Starting to scan log directory: %s", Config.LOG_DIR)
+        logger.info("📂 Starting to scan log directory: %s", Config.LOG_DIR)
         start_time = datetime.now()
         log_files = []
         scanned_files = 0
@@ -1540,12 +1547,12 @@ async def list_log_files_with_metadata():
                         "size": metadata['size'],
                         "lines": metadata['lines']
                     })
-                    logger.debug("Found log file: %s (Size: %s, Lines: %s)", 
+                    logger.debug("🪵Found log file: %s (Size: %s, Lines: %s)", 
                                file.name, metadata['size'], metadata['lines'])
         
         duration = (datetime.now() - start_time).total_seconds()
         logger.info(
-            "Completed directory scan. Files: %d (scanned %d). Time taken: %.2fs",
+            "🔍📄 Completed directory scan. Files: %d (scanned %d). Time taken: %.2fs",
             len(log_files), scanned_files, duration
         )
         
@@ -1558,7 +1565,7 @@ async def list_log_files_with_metadata():
             }
         })
     except Exception as e:
-        logger.error("Failed to list log files: %s", str(e), exc_info=True)
+        logger.error("❌Failed to list log files: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/list_log_files")

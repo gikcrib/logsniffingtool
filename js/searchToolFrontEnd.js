@@ -267,62 +267,83 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	// ➕ Add Single Result to Table (For Streaming)
 	function addSingleResultToTable(item) {
-		const row = resultsTableBody.insertRow();
-		row.insertCell().textContent = item.log_file;
-		row.insertCell().textContent = item.line_number;
-		row.insertCell().textContent = item.thread_id;
-		row.insertCell().textContent = item.service;
-		
-		const detailsCell = row.insertCell();
-		const showBtn = document.createElement('button');
-		showBtn.textContent = '📄 Show Details';
-		showBtn.addEventListener('click', () => {
-			// Get the current search text
-			const searchText = searchInput.value.trim();
-			// Apply highlighting to the snippet
-			detailsContent.innerHTML = highlightText(item.snippet, searchText);
-			detailsModal.style.display = 'flex';
-		});
-		detailsCell.appendChild(showBtn);
+	    const row = resultsTableBody.insertRow();
+	    row.insertCell().textContent = item.log_file;
+	    row.insertCell().textContent = item.line_number;
+	    row.insertCell().textContent = item.thread_id;
+	    row.insertCell().textContent = item.service;
+	    
+	    const detailsCell = row.insertCell();
+	    const showBtn = document.createElement('button');
+	    showBtn.className = 'searchtoolDetail-btn'; // Add this line
+	    showBtn.textContent = '📄 Show Details';
+	    showBtn.addEventListener('click', () => {
+	        // Get the current search text
+	        const searchText = searchInput.value.trim();
+	        // Apply highlighting to the snippet
+	        detailsContent.innerHTML = highlightText(item.snippet, searchText);
+	        detailsModal.style.display = 'flex';
+	    });
+	    detailsCell.appendChild(showBtn);
 	}
 
 	// Populate results table
 	function populateResultsTable(results) {
-		resultsTableBody.innerHTML = '';
-		if (results.length === 0) {
-			const row = resultsTableBody.insertRow();
-			row.insertCell().textContent = 'No Match Found';
-			row.insertCell().textContent = '-';
-			row.insertCell().textContent = '-';
-			row.insertCell().textContent = '-';
-			row.insertCell().textContent = '-';
-			return;
-		}
-		results.forEach((item, index) => {
-			const row = resultsTableBody.insertRow();
-			row.insertCell().textContent = item.log_file;
-			row.insertCell().textContent = item.line_number;
-			row.insertCell().textContent = item.thread_id;
-			row.insertCell().textContent = item.service;
-			const detailsCell = row.insertCell();
-			const showBtn = document.createElement('button');
-			showBtn.textContent = '📄 Show Details';
-			showBtn.addEventListener('click', () => {
-				// Get the current search text
-				const searchText = searchInput.value.trim();
-				// Apply highlighting to the snippet
-				detailsContent.innerHTML = highlightText(item.snippet, searchText);
-				detailsModal.style.display = 'flex';
-			});
-			detailsCell.appendChild(showBtn);
-		});
+	    resultsTableBody.innerHTML = '';
+	    if (results.length === 0) {
+	        const row = resultsTableBody.insertRow();
+	        row.insertCell().textContent = 'No Match Found';
+	        row.insertCell().textContent = '-';
+	        row.insertCell().textContent = '-';
+	        row.insertCell().textContent = '-';
+	        row.insertCell().textContent = '-';
+	        return;
+	    }
+	    results.forEach((item, index) => {
+	        const row = resultsTableBody.insertRow();
+	        row.insertCell().textContent = item.log_file;
+	        row.insertCell().textContent = item.line_number;
+	        row.insertCell().textContent = item.thread_id;
+	        row.insertCell().textContent = item.service;
+	        const detailsCell = row.insertCell();
+	        const showBtn = document.createElement('button');
+	        showBtn.className = 'searchtoolDetail-btn'; // Add this line
+	        showBtn.textContent = '📄 Show Details';
+	        showBtn.addEventListener('click', () => {
+	            // Get the current search text
+	            const searchText = searchInput.value.trim();
+	            // Apply highlighting to the snippet
+	            detailsContent.innerHTML = highlightText(item.snippet, searchText);
+	            detailsModal.style.display = 'flex';
+	        });
+	        detailsCell.appendChild(showBtn);
+	    });
 	}
 
     // Copy button
-    copyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(detailsContent.textContent);
-        console.log('Snippet copied to clipboard');
-    });
+	copyBtn.addEventListener('click', async () => {
+	    try {
+	        await navigator.clipboard.writeText(detailsContent.textContent);
+	        
+	        // Visual feedback
+	        copyBtn.innerHTML = 'Copied! ✔️';
+	        copyBtn.classList.add('searchtoolDetail-copy-success');
+	        
+	        // Reset button after 2 seconds
+	        setTimeout(() => {
+	            copyBtn.innerHTML = '📋 Copy';
+	            copyBtn.classList.remove('searchtoolDetail-copy-success');
+	        }, 2000);
+	        
+	        console.log('Snippet copied to clipboard');
+	    } catch (err) {
+	        console.error('Failed to copy:', err);
+	        copyBtn.innerHTML = 'Failed! ❌';
+	        setTimeout(() => {
+	            copyBtn.innerHTML = '📋 Copy';
+	        }, 2000);
+	    }
+	});
 
     // Close button
     closeBtn.addEventListener('click', () => {
