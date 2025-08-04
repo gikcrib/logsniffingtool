@@ -344,6 +344,8 @@ function applyRqrsFilters() {
     });
 }
 
+
+
 // =============================================
 // 6. RQRS (Request/Response) FUNCTIONS
 // =============================================
@@ -443,6 +445,7 @@ async function fetchRQRS(log) {
         filterControls.forEach(control => {
             control.disabled = false;
         });
+        document.getElementById("downloadCsvBtn").disabled = false;
         
     } catch (error) {
         console.error("Error loading RQ/RS data:", error);
@@ -483,6 +486,43 @@ function extractServiceFromThread(thread) {
     return "UNKNOWN";
 }
 
+// CSV EXPORT FUNCTIONS
+function convertTableToCSV() {
+    const headers = [];
+    const rows = [];
+    
+    // Get table headers
+    document.querySelectorAll('#rqrsTable thead th').forEach(th => {
+        headers.push(`"${th.textContent.replace(/"/g, '""')}"`);
+    });
+    
+    // Get table rows (only visible ones)
+    document.querySelectorAll('#rqrsTable tbody tr').forEach(tr => {
+        if (tr.style.display !== 'none') {
+            const row = [];
+            tr.querySelectorAll('td').forEach(td => {
+                // Remove warning icon if present
+                const text = td.textContent.replace(' ⚠️', '');
+                row.push(`"${text.replace(/"/g, '""')}"`);
+            });
+            rows.push(row.join(','));
+        }
+    });
+    
+    return [headers.join(','), ...rows].join('\n');
+}
+
+function triggerCSVDownload(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 // =============================================
 // 7. XML HANDLING FUNCTIONS
 // =============================================
@@ -1095,6 +1135,28 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // RQRS Download as CSV button
+    document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+        try {
+            // Check if table has data
+            const tableBody = document.querySelector('#rqrsTable tbody');
+            if (!tableBody || tableBody.children.length === 0) {
+                showToast('❌ No data available to download');
+                return;
+            }
+            
+            // Generate CSV
+            const csvContent = convertTableToCSV();
+            const filename = `rqrs_data_${new Date().toISOString().slice(0, 10)}.csv`;
+            
+            // Trigger download
+            triggerCSVDownload(csvContent, filename);
+            showToast('✅ Table downloaded as CSV');
+        } catch (error) {
+            console.error('Error exporting to CSV:', error);
+            showToast('❌ Failed to export table');
+        }
+    });
     // Regular filters
     document.getElementById('threadFilter').addEventListener('input', applyFilters);
     document.getElementById('serviceFilter').addEventListener('input', applyFilters);

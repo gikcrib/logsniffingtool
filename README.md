@@ -1,6 +1,6 @@
-# 📘 JBoss Log Analyzer
+# 📘 Log Sniffer Tool
 
-A simple and easy-to-use web tool for scanning JBoss log files.  
+A simple and easy-to-use web tool for scanning log files. 
 This tool is designed for non-technical users to quickly inspect logs from local or remote servers using a clean web interface — all within a WSL Ubuntu environment.
 
 ---
@@ -20,7 +20,7 @@ This tool is designed for non-technical users to quickly inspect logs from local
 ```
 jbossQuickLogScanner/
 ├── main.py                 # FastAPI backend with logging setup
-├── scp_wrapper.sh          # (Optional) Bash script for SCP log fetching
+├── scp_wrapper.sh          # (External) Bash script for SCP log fetching
 ├── templates/
 │   └── index.html          # Web interface (Jinja2 template)
 ├── static/

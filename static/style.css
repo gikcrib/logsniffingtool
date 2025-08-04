@@ -678,6 +678,22 @@ pre, .xml-viewer {
   line-height: 1.4;
 }
 
+/* Download RQRS as CSV */
+#downloadCsvBtn {
+    background-color: #4CAF50;
+    color: white;
+    margin-left: 10px;
+}
+
+#downloadCsvBtn:hover {
+    background-color: #45a049;
+}
+
+#downloadCsvBtn:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
 /* 🔄 Refresh Confirmation Modal Styling */
 #refreshConfirmModal.modal-overlay {
   display: none;
