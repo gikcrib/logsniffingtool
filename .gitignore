@@ -12,3 +12,4 @@
 *.pid
 *.zip
 *.7z
+*.bak.py
