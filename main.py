@@ -39,21 +39,21 @@ async def lifespan(app: FastAPI):
     print(banner)
     
     # 2. Your original startup_event() logic
-    logger.info("FastAPI server starting...")
-    logger.info(f"Log directory: {os.path.abspath(Config.LOG_DIR)}")
+    logger.info("⚡FastAPI server starting...")
+    logger.info(f"🗂️ Log directory: {os.path.abspath(Config.LOG_DIR)}")
     
     await initialize_critical_services()
     
     if Config.PRELOAD_ENABLED:
         asyncio.create_task(delayed_background_preload())
-        logger.info("Background preload will start after server becomes responsive")
+        logger.info("📦 Background preload will start after server becomes responsive")
     else:
-        logger.info("Skipping preload (PRELOAD_ENABLED=False)")
+        logger.info("📛 Skipping preload (PRELOAD_ENABLED=False)")
     
     yield  # This is where your app runs
     
     # (Optional) Add shutdown logic here if needed
-    logger.info("Server shutting down...")
+    logger.info("⏻ Server shutting down...")
 
 # Initialize FastAPI
 app = FastAPI(lifespan=lifespan)
@@ -712,14 +712,14 @@ async def combined_middleware(request: Request, call_next):
 
 async def initialize_critical_services():
     """Initialize essential services before accepting requests"""
-    logger.info("Initializing critical services...")
+    logger.info("🚀 Initializing critical services...")
     # Add any essential initialization here
     pass
 
 async def delayed_background_preload():
     """Start background preload after a short delay"""
     await asyncio.sleep(10)
-    logger.info("Starting background preload now")
+    logger.info("🚀 Starting background preload now")
     await background_preload()
 
 async def background_preload():
@@ -734,7 +734,7 @@ async def background_preload():
                 await asyncio.sleep(0.1)
                 
         except Exception as e:
-            logger.error(f"Background preload failed for {filename}: {str(e)}")
+            logger.error(f"🔴 Background preload failed for {filename}: {str(e)}")
 
 async def get_large_files() -> List[str]:
     """Get list of large files with cooperative yielding"""
@@ -998,13 +998,21 @@ async def download_remote_logs(request: Request, req: SCPDownloadRequest):
                     extract_compressed_files()
                     log_files = list_log_files() 
                     print(f"📋 Found {len(log_files)} log files after download")
-                    asyncio.create_task(async_preload_logs())
+                    if Config.PRELOAD_LARGE_FILES:
+                        logger.info(f"⚡Preloading task TRIGGERED. (PRELOAD_LARGE_FILES=True)")
+                        asyncio.create_task(async_preload_logs())
+                    else:
+                        logger.info(f"🔴 Preloading task HALTED. (PRELOAD_LARGE_FILES=False)")
                 else:
                     if stderr.strip() == "":
                         print("⚠️ SCP ended with no error output but returned a non-zero exit code.")
                         log_files = list_log_files()
                         print(f"📋 Found {len(log_files)} log files after failed download")
-                        asyncio.create_task(async_preload_logs())
+                        if Config.PRELOAD_LARGE_FILES:
+                            logger.info(f"⚡Preloading task TRIGGERED. (PRELOAD_LARGE_FILES=True)")
+                            asyncio.create_task(async_preload_logs())
+                        else:
+                            logger.info(f"🔴 Preloading task HALTED. (PRELOAD_LARGE_FILES=False)")
                     else:
                         scp_status["error"] = f"SCP failed: {stderr.strip()}"
 
