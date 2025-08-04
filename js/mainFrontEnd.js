@@ -349,32 +349,35 @@ function applyRqrsFilters() {
 // =============================================
 
 async function fetchRQRS(log) {
+    const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+    rqrsTableBody.innerHTML = "<tr><td colspan='4' style='text-align: center;'>⏳ Loading RQ/RS data...</td></tr>";
+
     try {
         // 1. Make the API request
         const response = await fetch(`/get_rqrs?log=${encodeURIComponent(log)}`);
         
         // 2. Check if request failed
         if (!response.ok) {
-            throw new Error(`Server returned ${response.status} ${response.statusText}`);
+            const errorData = await response.json().catch(() => null);
+            throw new Error(errorData?.error || `Server returned ${response.status} ${response.statusText}`);
         }
         
         // 3. Parse JSON data
         const data = await response.json();
         
-        // 4. Validate response structure
-        if (!data || !Array.isArray(data.rqrs)) {
-            throw new Error("Invalid data format from server");
-        }
+        // 4. Handle both response formats
+        const rqrsData = Array.isArray(data.rqrs) ? data.rqrs : 
+                        Array.isArray(data.entries) ? data.entries : 
+                        [];
         
         // 5. Store data in cache for later use
-        window.rqrsCache = data.rqrs;
+        window.rqrsCache = rqrsData;
         
-        // 6. Get reference to table body
-        const rqrsTableBody = document.querySelector("#rqrsTable tbody");
-        rqrsTableBody.innerHTML = ""; // Clear existing rows
+        // 6. Clear existing rows
+        rqrsTableBody.innerHTML = "";
         
         // 7. Handle empty results
-        if (data.rqrs.length === 0) {
+        if (rqrsData.length === 0) {
             const emptyRow = document.createElement("tr");
             emptyRow.innerHTML = `
                 <td colspan="4" style="text-align: center; color: #666;">
@@ -386,31 +389,40 @@ async function fetchRQRS(log) {
         }
         
         // 8. Create table rows for each entry
-        data.rqrs.forEach((entry, index) => {
+        rqrsData.forEach((entry, index) => {
             const row = document.createElement("tr");
             
+            // Normalize entry data (handle both formats)
+            const normalizedEntry = {
+                line: entry.line || entry.line_number || "??",
+                thread: entry.thread || entry.thread_id || "UNKNOWN",
+                service: entry.service || "UNKNOWN",
+                tag: entry.tag || "???",
+                has_issue: entry.has_issue || false
+            };
+
             // Line Number column
             const lineCell = document.createElement("td");
-            lineCell.textContent = entry.line || "??"; // Default if missing
-            lineCell.style.textAlign = "center"; // Right-align numbers
+            lineCell.textContent = normalizedEntry.line;
+            lineCell.style.textAlign = "center";
             
             // Thread ID column
             const threadCell = document.createElement("td");
-            threadCell.textContent = entry.thread || "UNKNOWN";
+            threadCell.textContent = normalizedEntry.thread;
             
-            // Service column (new)
+            // Service column
             const serviceCell = document.createElement("td");
-            serviceCell.textContent = entry.service || "UNKNOWN";
+            serviceCell.textContent = normalizedEntry.service;
             
             // XML Tag column (with clickable link)
             const tagCell = document.createElement("td");
             const tagLink = document.createElement("a");
             tagLink.href = "#";
-            tagLink.textContent = (entry.tag || "???") + (entry.has_issue ? " ⚠️" : "");
-            tagLink.style.color = entry.has_issue ? "#d32f2f" : "#1976d2"; // Red for errors
+            tagLink.textContent = normalizedEntry.tag + (normalizedEntry.has_issue ? " ⚠️" : "");
+            tagLink.style.color = normalizedEntry.has_issue ? "#d32f2f" : "#1976d2";
             tagLink.onclick = (e) => {
                 e.preventDefault();
-                fetchAndDisplayXMLForModal(log, index, entry.tag);
+                fetchAndDisplayXMLForModal(log, index, normalizedEntry.tag);
             };
             tagCell.appendChild(tagLink);
             
@@ -436,7 +448,6 @@ async function fetchRQRS(log) {
         console.error("Error loading RQ/RS data:", error);
         
         // Show error message in the table
-        const rqrsTableBody = document.querySelector("#rqrsTable tbody");
         rqrsTableBody.innerHTML = `
             <tr>
                 <td colspan="4" style="color: red; text-align: center; padding: 20px;">
@@ -449,6 +460,9 @@ async function fetchRQRS(log) {
         // Ensure filters stay disabled on error
         document.querySelectorAll("#rqrsFilterControls input, #rqrsClearFiltersBtn")
             .forEach(el => el.disabled = true);
+            
+        // Clear cache on error
+        window.rqrsCache = [];
     }
 }
 
@@ -474,58 +488,71 @@ function extractServiceFromThread(thread) {
 // =============================================
 
 async function fetchAndDisplayXMLForModal(log, index, tag) {
-    const lineNumber = window.rqrsCache[index].line;
-    console.log("📨 Requesting XML content for:", { log, lineNumber, tag });
+    const entry = window.rqrsCache[index];
+    console.log("DEBUG - Entry being requested:", {
+        log,
+        index,
+        tag,
+        entryLine: entry.line,
+        entryThread: entry.thread,
+        entryService: entry.service
+    });
+    
+    if (!entry) {
+        showToast("❌ No data found for this entry");
+        return;
+    }
+
+    console.log("📨 Requesting XML content for:", { log, lineNumber: entry.line, tag });
     showLoadingXmlModal();
 
     try {
-        const response = await fetch(`/get_rqrs_content?log=${encodeURIComponent(log)}&line_number=${lineNumber}&tag=${encodeURIComponent(tag)}`);
+        const response = await fetch(
+            `/get_rqrs_content?log=${encodeURIComponent(log)}&line_number=${entry.line}&tag=${encodeURIComponent(tag)}`
+        );
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorData = await response.json().catch(() => null);
+            throw new Error(errorData?.error || `Server returned ${response.status}`);
         }
 
         const data = await response.json();
         console.log("📦 Response data:", data);
 
-        if (!data.pretty_xml) {
+        if (data.error && data.raw_xml) {
+            // Show raw XML if parsing failed but we have content
+            displayXmlContent(tag, data.raw_xml, "Raw XML (Parser Error)");
+            showToast("⚠️ Showing raw XML due to parser error");
+        } else if (data.pretty_xml) {
+            displayXmlContent(tag, data.pretty_xml, "Formatted XML");
+        } else {
             throw new Error("No XML content in response");
         }
-
-        const modal = document.getElementById("customXmlModal");
-        const title = document.getElementById("customModalTitle");
-        const content = document.getElementById("xmlContent");
-        const container = modal.querySelector(".custom-xml-container");
-
-        if (!modal || !title || !content || !container) {
-            throw new Error("Modal elements not found");
-        }
-
-        title.textContent = `📄 ${tag} (Line ${lineNumber})`;
-        content.textContent = data.pretty_xml;
-        modal.style.display = "flex";
-        content.style.display = "block";
-
-        if (window.hljs) {
-            hljs.highlightElement(content);
-        }
-
-        const footer = modal.querySelector(".custom-modal-footer");
-        if (footer) {
-            footer.innerHTML = `
-                <small class="text-muted">
-                    Lines ${data.actual_start_line} to ${data.actual_end_line} | 
-                    ${new Date().toLocaleString()}
-                </small>
-            `;
-        }
-
-        console.log("✅ XML displayed in UI");
     } catch (err) {
         console.error("❌ Error displaying XML:", err);
-        showToast(`❌ Failed to load XML from line ${lineNumber}`);
+        showToast(`❌ Failed to load XML: ${err.message}`);
     } finally {
         hideLoadingXmlModal(500);
+    }
+}
+
+function displayXmlContent(tag, xmlContent, titleSuffix) {
+    const modal = document.getElementById("customXmlModal");
+    const title = document.getElementById("customModalTitle");
+    const content = document.getElementById("xmlContent");
+    const container = modal.querySelector(".custom-xml-container");
+
+    if (!modal || !title || !content || !container) {
+        throw new Error("Modal elements not found");
+    }
+
+    title.textContent = `📄 ${tag} (${titleSuffix})`;
+    content.textContent = xmlContent;
+    modal.style.display = "flex";
+    content.style.display = "block";
+
+    if (window.hljs) {
+        hljs.highlightElement(content);
     }
 }
 
