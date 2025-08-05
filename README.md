@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool Logo" width="60" height="60">
+  <img src="static/img/LogSniffingTool_512x512.png" alt="Log Sniffing Tool Logo" width="60" height="60">
 </p>
 
 # 📦 Log Sniffing Tool
