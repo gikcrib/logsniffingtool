@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log Sniffing Tool - README</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            max-width: 960px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background-color: #fefefe;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #007acc;
+        }
+        code, pre {
+            font-family: 'Courier New', monospace;
+            background: #f4f4f4;
+            padding: 4px 6px;
+            border-radius: 4px;
+        }
+        pre {
+            overflow-x: auto;
+            padding: 10px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1em;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+        }
+        blockquote {
+            margin-left: 20px;
+            padding-left: 10px;
+            border-left: 4px solid #007acc;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+<p align="center">
+  <img src="static/img/LogSniffingTool_512x512.png" alt="Log Sniffing Tool Logo" width="512" height="512">
+</p>
+
+<h1>📦 Log Sniffing Tool</h1>
+<p>A powerful, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with large <strong>JBoss log files</strong> — whether they reside locally or on remote AWS servers.</p>
+<p>This project is designed with usability and performance in mind: offering error detection, XML parsing, full-text search, and large file viewing through a beginner-friendly web interface.</p>
+<hr />
+<h2>✨ Features</h2>
+<h3>📥 Seamless Log Download from AWS</h3>
+<ul>
+<li>Connects via SCP to your AWS environment.</li>
+<li>Downloads logs into local <code>./logs</code> folder.</li>
+<li>Real-time download progress with ETA and abort button.</li>
+<li>Automatically extracts compressed <code>.zip</code>, <code>.tar.gz</code>, <code>.gz</code> files.</li>
+</ul>
+<h3>🧪 Smart Error Scanner</h3>
+<ul>
+<li>Scans logs for <code>[FATAL]</code>, <code>[ERROR]</code>, and <code>[WARN]</code> entries.</li>
+<li>Displays where the error occurred, including:</li>
+<li>Log file name</li>
+<li>Line number</li>
+<li>Thread ID</li>
+<li>Service class</li>
+<li>Summary counters and color-coded error bars.</li>
+</ul>
+<h3>🧩 SOAP XML RQ/RS Parsing</h3>
+<ul>
+<li>Detects and extracts all <code>XML Request:</code> and <code>XML Response:</code> payloads.</li>
+<li>Displays as a searchable table with:</li>
+<li>Line number</li>
+<li>Thread ID</li>
+<li>Service class</li>
+<li>Tag (with clickable viewer)</li>
+<li>Highlights entries containing issues with a warning icon (⚠️).</li>
+<li>Pretty-printed modal viewer with copy-to-clipboard.</li>
+<li>CSV export support.</li>
+</ul>
+<h3>🔍 Keyword Search Tool</h3>
+<ul>
+<li>Scans all logs or targeted logs for specific keywords.</li>
+<li>Displays matching lines, context, and metadata.</li>
+<li>Real-time streamed progress + Abort option.</li>
+<li>Summary metrics: files scanned, matched, time elapsed.</li>
+</ul>
+<h3>📜 Raw Log Viewer</h3>
+<ul>
+<li>Scroll through entire logs like in Notepad++.</li>
+<li>Line-number navigation, in-page search, previous/next match.</li>
+<li>"Go to line" and "Copy" options.</li>
+<li>Virtual scroll memory optimization for large files.</li>
+</ul>
+<hr />
+<h2>📁 Project Structure</h2>
+<pre><code>logsniffingtool/
+├── main.py                          # Backend logic (FastAPI)
+├── scp_wrapper.sh                   # SCP wrapper for AWS download
+├── scp_actual.pid                  # Runtime SCP tracking
+├── applog/
+│   └── fastAPI.log                  # Server logs
+├── js/
+│   ├── mainFrontEnd.js              # Error summary &amp; XML
+│   ├── searchToolFrontEnd.js        # Keyword search logic
+│   └── viewrawlogs.js               # Raw log viewer
+├── logs/
+│   └── sample.log                   # Sample log for testing
+├── static/
+│   ├── style.css                    # Global styles
+│   └── img/
+│       ├── favicon.ico
+│       ├── LogSniffingTool_60x60.png
+│       ├── LogSniffingTool_512x512.png
+│       └── LogSniffingTool_logo_1024x1024.png
+├── templates/
+│   └── index.html                   # Main tabbed interface
+</code></pre>
+<hr />
+<h2>⚙️ Installation &amp; Setup (for WSL Ubuntu)</h2>
+<h3>🧱 Prerequisites</h3>
+<ul>
+<li>Windows with WSL + Ubuntu installed</li>
+<li>Python 3.8+</li>
+<li>Basic familiarity with Linux terminal</li>
+</ul>
+<h3>✅ 1. Update System Packages</h3>
+<pre><code class="language-bash">sudo apt update &amp;&amp; sudo apt upgrade -y
+</code></pre>
+<h3>✅ 2. Install Required Dependencies</h3>
+<pre><code class="language-bash">sudo apt install -y python3 python3-pip python3-venv unzip curl openssh-client
+</code></pre>
+<h3>✅ 3. Extract the Project</h3>
+<pre><code class="language-bash">mkdir ~/logsniffingtool
+cd ~/logsniffingtool
+unzip /mnt/path/to/logsniffingtool.zip -d .
+</code></pre>
+<h3>✅ 4. Create and Activate Python Virtual Environment</h3>
+<pre><code class="language-bash">python3 -m venv venv
+source venv/bin/activate
+</code></pre>
+<h3>✅ 5. Install Python Dependencies</h3>
+<pre><code class="language-bash">cat &gt; requirements.txt &lt;&lt;EOF
+fastapi
+uvicorn
+pydantic
+aiofiles
+jinja2
+psutil
+EOF
+
+pip install -r requirements.txt
+</code></pre>
+<h3>✅ 6. Make SCP Script Executable</h3>
+<pre><code class="language-bash">chmod +x scp_wrapper.sh
+</code></pre>
+<h3>✅ 7. Run the Tool</h3>
+<pre><code class="language-bash">python3 -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+</code></pre>
+<p>Then open in your browser:</p>
+<pre><code>http://localhost:8001
+</code></pre>
+<hr />
+<h2>🧪 Sample Log Format</h2>
+<p>The tool expects JBoss-style logs, for example:</p>
+<pre><code>2025-07-01 12:00:01,234 [ThreadID] com.example.MyService [ERROR] Something bad happened
+XML Request:
+&lt;soapenv:Envelope&gt;...&lt;/soapenv:Envelope&gt;
+XML Response:
+&lt;soapenv:Envelope&gt;...&lt;/soapenv:Envelope&gt;
+</code></pre>
+<hr />
+<h2>📚 User Guide</h2>
+<h3>1. Download Logs</h3>
+<ul>
+<li>Click <strong>📥 Download Remote Logs</strong>.</li>
+<li>Enter SCP details (hostname, username, file path).</li>
+<li>Wait for download to finish (real-time progress shown).</li>
+</ul>
+<h3>2. Analyze Logs</h3>
+<ul>
+<li>Choose <strong>All logs</strong> or <strong>Specific log</strong> from the dropdown.</li>
+<li>Click <strong>🧪 Review Logs</strong> to begin analysis.</li>
+<li>View errors and filter by Thread or Service.</li>
+</ul>
+<h3>3. Browse SOAP XML</h3>
+<ul>
+<li>Switch to the <strong>Parsed XMLs</strong> tab.</li>
+<li>Filter by Thread ID, Service, or RQ/RS tag.</li>
+<li>Click on any tag to view formatted XML.</li>
+</ul>
+<h3>4. Search Log Content</h3>
+<ul>
+<li>Go to <strong>Search Tools</strong> tab.</li>
+<li>Enter keyword and select mode (All/Targeted).</li>
+<li>Click <strong>🔍 Search</strong> — results are streamed live.</li>
+<li>Click snippet row to view full context.</li>
+</ul>
+<h3>5. View Logs Like Text Editor</h3>
+<ul>
+<li>Switch to <strong>View Raw Logs</strong> tab.</li>
+<li>Choose a file, click <strong>📁 Load File</strong>.</li>
+<li>Search, navigate, and copy directly like in Notepad++.</li>
+</ul>
+<hr />
+<h2>❓ FAQ</h2>
+<h3>Q: How do I update the log file list?</h3>
+<p>A: Click <strong>🔄 Refresh List</strong> in any tab to re-fetch log files.</p>
+<h3>Q: What happens if SCP download fails?</h3>
+<p>A: A message will appear. Double-check SSH key, file path, or permissions.</p>
+<h3>Q: Why do I see no XML in the SOAP tab?</h3>
+<p>A: Ensure the log contains <code>XML Request:</code> or <code>XML Response:</code> blocks.</p>
+<h3>Q: Can I use this on Windows directly?</h3>
+<p>A: The tool is designed for WSL/Ubuntu. Native Windows support is not yet available.</p>
+<h3>Q: Where do the logs go after SCP?</h3>
+<p>A: Extracted files are moved into the <code>./logs/</code> folder.</p>
+<hr />
+<h2>🛠️ Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Issue</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SCP not working</td>
+<td>Ensure <code>scp</code> and <code>ssh</code> are installed: <code>sudo apt install openssh-client</code></td>
+</tr>
+<tr>
+<td>Port 8001 already in use</td>
+<td>Use a different port: <code>--port 8002</code></td>
+</tr>
+<tr>
+<td>FastAPI not found</td>
+<td>Activate venv: <code>source venv/bin/activate</code></td>
+</tr>
+<tr>
+<td>XML viewer not loading</td>
+<td>Log may not have valid RQ/RS entries or JS error; try refresh</td>
+</tr>
+<tr>
+<td>Large logs crash the browser</td>
+<td>Use <strong>View Raw Logs</strong> tab for memory-optimized viewing</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>🙌 Acknowledgments</h2>
+<p>This tool is designed for internal use and offline log analysis. Created to assist with:
+- Fast debugging
+- Issue reproduction
+- SOAP service inspection</p>
+<hr />
+<h2>📌 Status</h2>
+<p><strong>Version</strong>: <code>v1.0.0.BETA_RELEASE</code></p>
+<p>🛠️ Development ongoing. Core features are stable and working.</p>
+</body>
+</html>

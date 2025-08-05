@@ -13,3 +13,4 @@
 *.zip
 *.7z
 *.bak.py
+convert_md_to_html.py
