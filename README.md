@@ -2,7 +2,7 @@
   <img src="static/img/LogSniffingTool_512x512.png" alt="Log Sniffing Tool Logo" width="512" height="512">
 </p>
 
-<h1><img src="static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool Logo" width="12" height="12"> Log Sniffing Tool</h1> 
+<h1><img src="static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool Logo" width="60" height="60"> Log Sniffing Tool</h1> 
 
 A powerful, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with large **JBoss log files** — whether they reside locally or on remote AWS servers.
 
