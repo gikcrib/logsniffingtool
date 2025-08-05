@@ -63,9 +63,9 @@ class Config:
     LOG_OUTPUT_DIR = "./applog"
     LOG_DIR = "./logs"
     MAX_CACHE_SIZE = 10
-    PRELOAD_ENABLED = False
-    PRELOAD_LARGE_FILES = False
-    LARGE_FILE_THRESHOLD_MB = 50 # Threshold for processing XML RQ/RS from logs
+    PRELOAD_ENABLED = True
+    PRELOAD_LARGE_FILES = True
+    LARGE_FILE_THRESHOLD_MB = 10 # Threshold for processing XML RQ/RS from logs
     EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.tar.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
     CRITICAL_ENDPOINTS = [
         '/list_logs',
@@ -311,6 +311,13 @@ class AsyncLRUCache:
             if key in self.cache:
                 del self.cache[key]
                 self.order.remove(key)
+
+    async def invalidate_all(self):
+        """Clear all items from the cache"""
+        async with self.lock:
+            self.cache.clear()
+            self.order.clear()
+            logger.info("🧹 Cache completely cleared (all items removed)")
 
 class FileProcessor:
     def __init__(self):
@@ -1611,11 +1618,31 @@ async def cache_status():
 
 @app.post("/clear_cache")
 async def clear_cache():
-    """Clear the cache"""
-    await LOG_CACHE.invalidate_all()
-    return {"status": "Cache cleared"}
+    """Clear the entire cache"""
+    try:
+        # Get count before clearing (for logging/reporting)
+        keys_count = len(LOG_CACHE.cache)
+        
+        # Clear all cached items at once
+        await LOG_CACHE.invalidate_all()
+        
+        logger.info(f"🧹 Cleared cache with {keys_count} items")
+        return {
+            "status": "Cache cleared", 
+            "keys_cleared": keys_count,
+            "message": f"Successfully cleared {keys_count} items from cache"
+        }
+    except Exception as e:
+        logger.error(f"❌ Error clearing cache: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Cache clearance failed",
+                "message": str(e)
+            }
+        )
 
-@app.post("/refresh_cache")
+@app.post("/refresh_cache")  # This requires a POST request
 async def refresh_cache():
     """Manually trigger a full cache refresh"""
     files = [f for f in os.listdir(Config.LOG_DIR) if os.path.isfile(os.path.join(Config.LOG_DIR, f))]

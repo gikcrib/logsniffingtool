@@ -58,6 +58,14 @@ function formatXML(xml) {
     return formatted;
 }
 
+function setRefreshButtonLoading(isLoading) {
+    const refreshBtn = document.getElementById("refreshPageBtn");
+    if (refreshBtn) {
+        refreshBtn.disabled = isLoading;
+        refreshBtn.innerHTML = isLoading ? '⏳' : '🔄';
+    }
+}
+
 // =============================================
 // 2. MEMORY MANAGEMENT AND RESET FUNCTIONS
 // =============================================
@@ -1190,8 +1198,20 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // 🔄 If user confirms "Yes, refresh"
     if (confirmBtn) {
-        confirmBtn.addEventListener("click", () => {
-            location.reload(); // ✅ Reload the entire page
+        confirmBtn.addEventListener("click", async () => {
+            setRefreshButtonLoading(true);
+            modal.style.display = "none";
+            showToast('🔄 Clearing cache and refreshing...');
+            
+            try {
+                await clearCache();
+                await new Promise(resolve => setTimeout(resolve, 500));
+                location.reload(true);
+            } catch (error) {
+                location.reload(true);
+            } finally {
+                setRefreshButtonLoading(false);
+            }
         });
     } else {
         console.warn("⚠️ Confirm button not found in the DOM.");
@@ -1208,3 +1228,27 @@ document.addEventListener("DOMContentLoaded", function() {
         console.warn("⚠️ Cancel button not found in the DOM.");
     }
 });
+
+async function clearCache() {
+    try {
+        const response = await fetch('/clear_cache', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            throw new Error(errorData?.detail || errorData?.error || 'Failed to clear cache');
+        }
+        
+        const result = await response.json();
+        showToast('✅ Cache cleared successfully');
+        return result;
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        showToast(`❌ ${error.message}`);
+        throw error;
+    }
+}
