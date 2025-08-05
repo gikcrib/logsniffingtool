@@ -37,7 +37,7 @@
 				 </div>
 				 <div class="filter-row">
 					<div class="log-controls">
-					  <button id="openDownloadModalBtn" class="download-btn">📥 Download Remote Logs</button>
+					  <button id="openDownloadModalBtn" class="download-btn" title="Download From AWS Environment">📥 Download Remote Logs</button>
 
 					  <!-- 🔍 Analyze Logs radio group -->
 					  <label class="analyze-label" style="margin-left: 1rem;">🔍 Select Option:</label>
@@ -52,7 +52,7 @@
 					  <button id="refreshBtn" class="reviewlogs-btn" title="Refresh Log List">🔄 Refresh List</button>
 
 					  <!-- 🧪 Start -->
-					  <button id="startAnalysisBtn" class="reviewlogs-btn">🧪 Review Logs</button>
+					  <button id="startAnalysisBtn" class="reviewlogs-btn" title="Check Errors and Parse XMLs">🧪 Review Logs</button>
 
 					</div>
 				 </div>
@@ -129,8 +129,8 @@
                     <input type="text" id="rqrsTagFilter" placeholder="🔍 Filter by RQ/RS" disabled>
                     <label><input type="checkbox" id="rqrsDlxCheckbox" disabled> Filter DLX services</label>
                     <label><input type="checkbox" id="rqrsErrorCheckbox" disabled> Filter Errors</label>
-                    <button id="rqrsClearFiltersBtn" class="searchtoolfilters-button" disabled>❌ Clear Filters</button>
-                    <button id="downloadCsvBtn" class="searchtoolfilters-button" disabled>📥 Download Table</button>
+                    <button id="rqrsClearFiltersBtn" class="searchtoolfilters-button" title="Clear all filters" disabled>❌ Clear Filters</button>
+                    <button id="downloadCsvBtn" class="searchtoolfilters-button" title="Download Table as CSV" disabled>📥 Download Table</button>
                 </div>
                 <div class="rqrs-table-container">
                     <table id="rqrsTable" class="log-table">
@@ -165,7 +165,7 @@
 					  <option value="">-- Select Target File --</option>
 					</select>
 					<button id="refresListhSearchToolBtn" class="searchtoolfilters-button" title="Refresh Log List">🔄 Refresh List</button>
-					<button id="searchBtn" class="searchtoolfilters-button">🔍 Search</button>
+					<button id="searchBtn" class="searchtoolfilters-button" title="Search Keywords">🔍 Search</button>
 					<label class="searchtoolfilters-label">
 					  <input type="checkbox" id="streamingToggle" checked disabled hidden> <!-- Use Real-Time Streaming -->
 					</label>
@@ -243,7 +243,7 @@
 						<button id="logview-next-btn" class="logview-icon-btn" title="Find Next">Next ⏩</button>
 						<button id="logview-goto-btn" class="logview-goto-btn" title="Go to line">🔍 Go To</button>
 						<input type="number" id="logview-goto-input" class="logview-goto-input" placeholder="Line number">
-						<button id="logview-copy-btn" class="logview-copy-btn">📋 Copy</button>
+						<button id="logview-copy-btn" class="logview-copy-btn" title="Copy highlighted">📋 Copy</button>
 					</div>
 
 					<!-- Status bar -->
