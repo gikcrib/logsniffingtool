@@ -1,4 +1,6 @@
+.idea/
 /__pycache__/
+/venv/
 /logs/
 /temp/
 /applog/
@@ -8,3 +10,7 @@
 *.txt
 *.Identifier
 *.pid
+*.zip
+*.7z
+*.bak.py
+convert_md_to_html.py
