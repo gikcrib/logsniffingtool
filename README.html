@@ -52,11 +52,19 @@
   <img src="static/img/LogSniffingTool_512x512.png" alt="Log Sniffing Tool Logo" width="512" height="512">
 </p>
 
-<h1>📦 Log Sniffing Tool</h1>
-<p>A powerful, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with large <strong>JBoss log files</strong> — whether they reside locally or on remote AWS servers.</p>
+<h1><img src="static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool Logo" width="60" height="60"> Log Sniffing Tool</h1>
+
+<p>A handy, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with log files (JBoss log files is currently supported).</p>
 <p>This project is designed with usability and performance in mind: offering error detection, XML parsing, full-text search, and large file viewing through a beginner-friendly web interface.</p>
 <hr />
 <h2>✨ Features</h2>
+<h3>🧑‍💻 Built With</h3>
+<ul>
+<li>Python (FastAPI, uvicorn, aiofiles, Jinja2)</li>
+<li>JavaScript (Vanilla JS, DOM manipulation)</li>
+<li>HTML5 + CSS3 (custom responsive styling)</li>
+<li>Bash (SCP wrapper for remote downloads)</li>
+</ul>
 <h3>📥 Seamless Log Download from AWS</h3>
 <ul>
 <li>Connects via SCP to your AWS environment.</li>
@@ -105,7 +113,7 @@
 <pre><code>logsniffingtool/
 ├── main.py                          # Backend logic (FastAPI)
 ├── scp_wrapper.sh                   # SCP wrapper for AWS download
-├── scp_actual.pid                  # Runtime SCP tracking
+├── scp_actual.pid                   # Runtime SCP tracking
 ├── applog/
 │   └── fastAPI.log                  # Server logs
 ├── js/
@@ -169,15 +177,6 @@ pip install -r requirements.txt
 <pre><code>http://localhost:8001
 </code></pre>
 <hr />
-<h2>🧪 Sample Log Format</h2>
-<p>The tool expects JBoss-style logs, for example:</p>
-<pre><code>2025-07-01 12:00:01,234 [ThreadID] com.example.MyService [ERROR] Something bad happened
-XML Request:
-&lt;soapenv:Envelope&gt;...&lt;/soapenv:Envelope&gt;
-XML Response:
-&lt;soapenv:Envelope&gt;...&lt;/soapenv:Envelope&gt;
-</code></pre>
-<hr />
 <h2>📚 User Guide</h2>
 <h3>1. Download Logs</h3>
 <ul>
@@ -234,7 +233,7 @@ XML Response:
 <tbody>
 <tr>
 <td>SCP not working</td>
-<td>Ensure <code>scp</code> and <code>ssh</code> are installed: <code>sudo apt install openssh-client</code></td>
+<td>Ensure <code>scp</code> and <code>ssh</code> are installed: <code>sudo apt install openssh-client</code>. Also ensure you are signed in using <code>aws sso login</code> before attempting to connect to AWS.</td>
 </tr>
 <tr>
 <td>Port 8001 already in use</td>

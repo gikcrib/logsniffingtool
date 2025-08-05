@@ -2,15 +2,21 @@
   <img src="static/img/LogSniffingTool_512x512.png" alt="Log Sniffing Tool Logo" width="512" height="512">
 </p>
 
-# 📦 Log Sniffing Tool
+<h1><img src="static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool Logo" width="60" height="60"> Log Sniffing Tool</h1>
 
-A powerful, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with large **JBoss log files** — whether they reside locally or on remote AWS servers.
+A handy, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with log files (JBoss log files is currently supported).
 
 This project is designed with usability and performance in mind: offering error detection, XML parsing, full-text search, and large file viewing through a beginner-friendly web interface.
 
 ---
 
 ## ✨ Features
+
+### 🧑‍💻 Built With
+- Python (FastAPI, uvicorn, aiofiles, Jinja2)
+- JavaScript (Vanilla JS, DOM manipulation)
+- HTML5 + CSS3 (custom responsive styling)
+- Bash (SCP wrapper for remote downloads)
 
 ### 📥 Seamless Log Download from AWS
 - Connects via SCP to your AWS environment.
@@ -58,7 +64,7 @@ This project is designed with usability and performance in mind: offering error 
 logsniffingtool/
 ├── main.py                          # Backend logic (FastAPI)
 ├── scp_wrapper.sh                   # SCP wrapper for AWS download
-├── scp_actual.pid                  # Runtime SCP tracking
+├── scp_actual.pid                   # Runtime SCP tracking
 ├── applog/
 │   └── fastAPI.log                  # Server logs
 ├── js/
@@ -137,19 +143,6 @@ Then open in your browser:
 ```
 http://localhost:8001
 ```
-
----
-
-## 🧪 Sample Log Format
-The tool expects JBoss-style logs, for example:
-```
-2025-07-01 12:00:01,234 [ThreadID] com.example.MyService [ERROR] Something bad happened
-XML Request:
-<soapenv:Envelope>...</soapenv:Envelope>
-XML Response:
-<soapenv:Envelope>...</soapenv:Envelope>
-```
-
 ---
 
 ## 📚 User Guide
@@ -203,15 +196,16 @@ A: Extracted files are moved into the `./logs/` folder.
 
 ## 🛠️ Troubleshooting
 
-| Issue                             | Solution                                                                 |
-|----------------------------------|--------------------------------------------------------------------------|
-| SCP not working                  | Ensure `scp` and `ssh` are installed: `sudo apt install openssh-client` |
-| Port 8001 already in use         | Use a different port: `--port 8002`                                      |
-| FastAPI not found                | Activate venv: `source venv/bin/activate`                                |
-| XML viewer not loading           | Log may not have valid RQ/RS entries or JS error; try refresh            |
-| Large logs crash the browser     | Use **View Raw Logs** tab for memory-optimized viewing                  |
+| Issue                        | Solution                                                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SCP not working              | Ensure `scp` and `ssh` are installed: `sudo apt install openssh-client`. Also ensure you are signed in using `aws sso login` before attempting to connect to AWS. |
+| Port 8001 already in use     | Use a different port: `--port 8002`                                                                                                                               |
+| FastAPI not found            | Activate venv: `source venv/bin/activate`                                                                                                                         |
+| XML viewer not loading       | Log may not have valid RQ/RS entries or JS error; try refresh                                                                                                     |
+| Large logs crash the browser | Use **View Raw Logs** tab for memory-optimized viewing                                                                                                            |
 
 ---
+
 
 ## 🙌 Acknowledgments
 This tool is designed for internal use and offline log analysis. Created to assist with:
