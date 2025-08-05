@@ -79,12 +79,13 @@ function resetMemoryState_MainFrontEnd() {
     document.getElementById("threadFilter").value = "";
     document.getElementById("serviceFilter").value = "";
     document.getElementById("rqrsThreadFilter").value = "";
+    document.getElementById("rqrsServiceFilter").value = "";
     document.getElementById("rqrsTagFilter").value = "";
     document.getElementById("rqrsDlxCheckbox").checked = false;
     document.getElementById("rqrsErrorCheckbox").checked = false;
 
     // Disable filter controls
-    ["threadFilter", "serviceFilter", "rqrsThreadFilter", "rqrsTagFilter", "rqrsDlxCheckbox", "rqrsErrorCheckbox", "rqrsClearFiltersBtn", "clearFiltersBtn"]
+    ["threadFilter", "serviceFilter", "rqrsThreadFilter", "rqrsServiceFilter", "rqrsTagFilter", "rqrsDlxCheckbox", "rqrsErrorCheckbox", "rqrsClearFiltersBtn", "clearFiltersBtn", "downloadCsvBtn"]
     .forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = true;
@@ -1164,4 +1165,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Initial fetch
     setTimeout(fetchLogs, 0);
+});
+
+// =============================================
+// 12. REFRESH / RELOAD THE PAGE
+// =============================================
+// ✅ Wait for the full HTML page to finish loading before attaching any event listeners
+document.addEventListener("DOMContentLoaded", function() {
+    // 🔄 Get the "Refresh" button by its ID
+    const refreshBtn = document.getElementById("refreshPageBtn");
+    const confirmBtn = document.getElementById("confirmRefreshBtn");
+    const cancelBtn = document.getElementById("cancelRefreshBtn");
+    const modal = document.getElementById("refreshConfirmModal");
+
+    // ✅ Check if all required elements exist before setting up event handlers
+    if (refreshBtn && modal) {
+        // When the user clicks the Refresh icon button
+        refreshBtn.addEventListener("click", () => {
+            modal.style.display = "flex"; // Show the confirmation modal
+        });
+    } else {
+        console.warn("⚠️ Refresh button or modal not found in the DOM.");
+    }
+
+    // 🔄 If user confirms "Yes, refresh"
+    if (confirmBtn) {
+        confirmBtn.addEventListener("click", () => {
+            location.reload(); // ✅ Reload the entire page
+        });
+    } else {
+        console.warn("⚠️ Confirm button not found in the DOM.");
+    }
+
+    // ❌ If user cancels
+    if (cancelBtn) {
+        cancelBtn.addEventListener("click", () => {
+            if (modal) {
+                modal.style.display = "none"; // ✅ Hide the modal if cancel is clicked
+            }
+        });
+    } else {
+        console.warn("⚠️ Cancel button not found in the DOM.");
+    }
 });
