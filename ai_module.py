@@ -74,8 +74,18 @@ def analyze_log_content(log_text: str) -> Dict[str, Any]:
         anomalies.append(f"🛠️ Services with most errors: {summary}")
 
     # ✅ Return structured insights
+    # ✅ Natural language summary (AI-style)
+    natural_summary = generate_summary_text(
+        total_lines=len(lines),
+        level_counter=level_counter,
+        top_threads=top_threads,
+        top_services=top_services,
+        similar_count=similar_count,
+        top_error_services=top_error_services
+    )
+
     return {
-        "summary": f"Total lines: {len(lines)}\nLog Levels: {dict(level_counter)}",
+        "summary": natural_summary,
         "top_threads": top_threads,
         "top_services": top_services,
         "anomalies": anomalies,
@@ -83,7 +93,8 @@ def analyze_log_content(log_text: str) -> Dict[str, Any]:
             "Check services with highest errors",
             "Focus on most active thread IDs",
             "Use the Raw Logs viewer to inspect context"
-        ]
+        ],
+        "failing_services": [f"{name} ({count})" for name, count in top_error_services]
     }
 
 # ✅ Helper function to detect similar error lines using Levenshtein distance
@@ -110,3 +121,29 @@ def detect_similar_errors(error_lines: list, threshold: float = 0.85) -> int:
                 break  # Stop comparing line_i with more
 
     return count
+
+# ✅ Helper to generate natural language summary
+def generate_summary_text(total_lines: int, level_counter, top_threads, top_services, similar_count: int, top_error_services) -> str:
+    """
+    Generates human-friendly log summary sentence using statistics.
+    """
+    summary = f"The log file contains {total_lines:,} lines.\n"
+
+    if level_counter:
+        level_summary = ", ".join([f"{lvl}: {cnt}" for lvl, cnt in level_counter.items()])
+        summary += f"Detected log levels include: {level_summary}.\n"
+
+    if top_error_services:
+        worst_service = top_error_services[0]
+        summary += f"The most error-prone service is '{worst_service[0]}' with {worst_service[1]} error(s).\n"
+
+    if top_threads:
+        summary += f"Top thread: {top_threads[0][0]} (seen {top_threads[0][1]} times).\n"
+
+    if top_services:
+        summary += f"Most active service: {top_services[0][0]} ({top_services[0][1]} lines).\n"
+
+    if similar_count > 0:
+        summary += f"{similar_count} repeating error line(s) detected (≥85% similarity).\n"
+
+    return summary.strip()
