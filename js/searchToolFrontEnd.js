@@ -58,6 +58,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		progressModal.style.display = 'flex';
 		resultsTableBody.innerHTML = ''; // Clear previous results
 
+		// ✅ Log the search to backend AI logger
+		logSearchAction(searchText, searchMode, targetFile);
+
 		// 🚀 Method 1: Regular Fetch (unchanged)
 		if (!useStreaming) { 
 			try {
@@ -366,6 +369,26 @@ document.addEventListener('DOMContentLoaded', function() {
     populateFileSelect();
 	});
 }); // END --- closing bracket for DOMContentLoaded function
+
+// ✅ NEW: Log search action to AI logger
+async function logSearchAction(keyword, mode, logFile = "") {
+  try {
+    await fetch("/ai/log_action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "search",
+        details: {
+          keyword,
+          mode,
+          log_file: logFile || "ALL"
+        }
+      })
+    });
+  } catch (e) {
+    console.warn("🔍 AI Logging failed for search:", e);
+  }
+}
 
 // ✅ NEW: Memory cleanup function for Search Tool tab
 function resetSearchToolMemory() {

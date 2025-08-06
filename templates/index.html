@@ -23,10 +23,11 @@
         <!-- Tab Navigation -->
         <div class="tab-container">
             <div class="tab-header">
-                <button class="tab-button active" data-tab="error-tab">Error Summary</button>
-                <button class="tab-button" data-tab="soap-tab">Parsed XMLs</button>
-                <button class="tab-button" data-tab="search-tab">Search Tools</button>
-				<button class="tab-button" data-tab="rawlogs-tab">View Raw Logs</button>
+                <button class="tab-button active" data-tab="error-tab">💥 Error Summary</button>
+                <button class="tab-button" data-tab="soap-tab">🧩 Parsed XMLs</button>
+                <button class="tab-button" data-tab="search-tab">🔎 Search Tools</button>
+				<button class="tab-button" data-tab="rawlogs-tab">🧾 View Raw Logs</button>
+				<button class="tab-button" data-tab="ai-tab">🤖 AI Assistant</button>
             </div>
 	
             <!-- Error Summary Tab -->
@@ -254,6 +255,24 @@
 						<div id="logview-content" class="logview-content"></div>
 					</div>
 				</div>
+
+			<!-- ✅ AI Tab -->
+			<div id="ai-tab" class="tab-content">
+			  <div class="section-header"><h2>🤖 AI Log Assistant</h2></div>
+
+			  <div class="log-controls">
+			    <select id="ai-log-select" class="searchtoolfilters-select">
+			      <option value="">-- Select Target File --</option>
+			    </select>
+			    <button id="ai-refresh-btn" class="searchtoolfilters-button">🔄 Refresh List</button>
+			    <button id="ai-analyze-btn" class="searchtoolfilters-button">🧠 Analyze with AI</button>
+			  </div>
+
+			  <div id="ai-output" class="error-summary" style="margin-top: 1rem;">
+			    <em>No analysis yet. Please select a log and click analyze.</em>
+			  </div>
+			</div>
+
         </div> <!-- End of tabs -->
 
         <!-- JavaScript Files Section-->
@@ -300,6 +319,9 @@
 			
 			<!-- 🔍 Link to ViewLog Frontend JS -->
 			<script src="./js/viewrawlogs.js"></script>
+
+			<!-- 🔍 Link to AI Frontend JS -->
+			<script src="./js/aiAssistant.js"></script>
 
         <!-- All modal dialogs remain here -->
 

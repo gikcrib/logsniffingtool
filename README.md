@@ -63,6 +63,7 @@ This project is designed with usability and performance in mind: offering error 
 ```
 logsniffingtool/
 ├── main.py                          # Backend logic (FastAPI)
+├── ai_module.py                     # Backend AI Assistant
 ├── scp_wrapper.sh                   # SCP wrapper for AWS download
 ├── scp_actual.pid                   # Runtime SCP tracking
 ├── applog/
@@ -70,7 +71,8 @@ logsniffingtool/
 ├── js/
 │   ├── mainFrontEnd.js              # Error summary & XML
 │   ├── searchToolFrontEnd.js        # Keyword search logic
-│   └── viewrawlogs.js               # Raw log viewer
+│   ├── viewrawlogs.js               # Raw log viewer
+│   └── aiAssistant.js               # AI assistant
 ├── logs/
 │   └── sample.log                   # Sample log for testing
 ├── static/
@@ -125,6 +127,7 @@ pydantic
 aiofiles
 jinja2
 psutil
+python-Levenshtein
 EOF
 
 pip install -r requirements.txt

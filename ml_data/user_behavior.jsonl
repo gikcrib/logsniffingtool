@@ -1,0 +1,10 @@
+{"timestamp": "2025-08-05T23:22:57.721421Z", "action": "ai_analysis", "details": {"log_file": "EDW_NDC18.1_10Jul.03.27.46_edw-dev-5.dev.dxhst.com.matrixtdp.log"}}
+{"timestamp": "2025-08-05T23:24:35.456151Z", "action": "ai_analysis", "details": {"log_file": "EDW_NDC18.1_10Jul.03.27.46_edw-dev-5.dev.dxhst.com.matrixtdp.log"}}
+{"timestamp": "2025-08-05T23:35:38.592471Z", "action": "search", "details": {"keyword": "[ERROR]", "mode": "all", "log_file": "ALL"}}
+{"timestamp": "2025-08-05T23:36:15.523658Z", "action": "view_raw_log", "details": {"log_file": "EDW_NDC18.1_10Jul.03.27.46_edw-dev-5.dev.dxhst.com.matrixtdp.log"}}
+{"timestamp": "2025-08-05T23:43:17.597603Z", "action": "analyze_logs", "details": {"mode": "all", "log_file": "ALL"}}
+{"timestamp": "2025-08-05T23:43:58.733918Z", "action": "ai_analysis", "details": {"log_file": "EDW_NDC18.1_10Jul.03.27.46_edw-dev-5.dev.dxhst.com.matrixtdp.log"}}
+{"timestamp": "2025-08-05T23:45:39.031053Z", "action": "analyze_logs", "details": {"mode": "all", "log_file": "ALL"}}
+{"timestamp": "2025-08-05T23:46:12.521023Z", "action": "analyze_logs", "details": {"mode": "specific", "log_file": "EDW_REST_11Jul.06.54.50_edw-dev-5.dev.dxhst.com.matrixtdp.log"}}
+{"timestamp": "2025-08-05T23:46:17.058974Z", "action": "view_xml", "details": {"log_file": "EDW_REST_11Jul.06.54.50_edw-dev-5.dev.dxhst.com.matrixtdp.log", "line_number": 8, "tag": "CompSubTypeManageSvRS"}}
+{"timestamp": "2025-08-06T00:05:02.612802Z", "action": "ai_analysis", "details": {"log_file": "EDW_NDC18.1_10Jul.03.27.46_edw-dev-5.dev.dxhst.com.matrixtdp.log"}}
