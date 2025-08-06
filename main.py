@@ -65,8 +65,8 @@ class Config:
     LOG_OUTPUT_DIR = "./applog"
     LOG_DIR = "./logs"
     MAX_CACHE_SIZE = 10
-    PRELOAD_ENABLED = True
-    PRELOAD_LARGE_FILES = True
+    PRELOAD_ENABLED = False
+    PRELOAD_LARGE_FILES = False
     LARGE_FILE_THRESHOLD_MB = 10 # Threshold for processing XML RQ/RS from logs
     EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.tar.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
     CRITICAL_ENDPOINTS = [
@@ -508,9 +508,11 @@ async def process_file_normal(filepath: str, filename: str) -> Dict[str, Any]:
     line_count = 0
     previous_line = ""
     start_time = time.time()
-    xml_marker_found = False  # Track if we found an XML marker
+    xml_marker_found = False
+    xml_buffer = []
     last_timestamp = ""
     last_service = "UNKNOWN"
+    xml_start_line = 0
     
     try:
         async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
@@ -523,40 +525,63 @@ async def process_file_normal(filepath: str, filename: str) -> Dict[str, Any]:
                     
                 # Check for timestamp line
                 if Patterns.TIMESTAMP.match(stripped):
+                    # If we were collecting XML, process it before starting new entry
+                    if xml_buffer:
+                        xml_content = '\n'.join(xml_buffer)
+                        if match := Patterns.RQRS.search(xml_content):
+                            entries.append({
+                                "line": xml_start_line,
+                                "thread": extract_thread_id(last_timestamp),
+                                "service": last_service,
+                                "tag": match.group(1),
+                                "raw": xml_content[:512],  # First 512 chars
+                                "has_issue": bool(Patterns.XML_ERRORS.search(xml_content))
+                            })
+                        xml_buffer = []
+                    
                     last_timestamp = stripped
                     last_service = extract_service(stripped)
+                    xml_marker_found = False
                     
                     # Check if this line contains an XML marker
                     if "XML Request:" in stripped or "XML Response:" in stripped:
                         xml_marker_found = True
-                        continue
+                        xml_start_line = line_count + 1  # Next line will be XML start
                 
-                # Check if we should look for XML (after marker)
-                if xml_marker_found and stripped.startswith("<"):
-                    if match := Patterns.RQRS.search(stripped):
-                        thread_match = (Patterns.THREAD.search(last_timestamp) or 
-                                      Patterns.ALT_THREAD.search(last_timestamp))
-                        thread_id = thread_match.group(1) if thread_match else None
-                        
-                        if not thread_id:
-                            bracketed = Patterns.BRACKETED.findall(last_timestamp)
-                            thread_id = next(
-                                (x for x in bracketed if Patterns.THREAD_FALLBACK.match(x)), 
-                                "UNKNOWN"
-                            )
-                        
-                        entries.append({
-                            "line": line_count,
-                            "thread": thread_id,
-                            "service": last_service,
-                            "tag": match.group(1),
-                            "raw": stripped[:512],
-                            "has_issue": bool(Patterns.XML_ERRORS.search(stripped))
-                        })
-                        xml_marker_found = False  # Reset after capturing XML
+                # Handle XML content collection
+                elif xml_marker_found:
+                    if stripped.startswith("<"):
+                        xml_buffer.append(stripped)
+                    elif xml_buffer:  # If we're in XML and hit non-XML line
+                        # Process the collected XML
+                        xml_content = '\n'.join(xml_buffer)
+                        if match := Patterns.RQRS.search(xml_content):
+                            entries.append({
+                                "line": xml_start_line,
+                                "thread": extract_thread_id(last_timestamp),
+                                "service": last_service,
+                                "tag": match.group(1),
+                                "raw": xml_content[:512],
+                                "has_issue": bool(Patterns.XML_ERRORS.search(xml_content))
+                            })
+                        xml_buffer = []
+                        xml_marker_found = False
                 
                 previous_line = stripped
-                
+            
+            # Process any remaining XML at end of file
+            if xml_buffer:
+                xml_content = '\n'.join(xml_buffer)
+                if match := Patterns.RQRS.search(xml_content):
+                    entries.append({
+                        "line": xml_start_line,
+                        "thread": extract_thread_id(last_timestamp),
+                        "service": last_service,
+                        "tag": match.group(1),
+                        "raw": xml_content[:512],
+                        "has_issue": bool(Patterns.XML_ERRORS.search(xml_content))
+                    })
+        
         processing_time = time.time() - start_time
         logger.info(f"Processed {filename} ({line_count} lines, {len(entries)} entries) in {processing_time:.2f}s")
         
@@ -575,6 +600,11 @@ async def process_large_file_chunked(filepath: str, filename: str) -> Dict[str, 
     entries = []
     line_count = 0
     file_start = time.time()
+    xml_buffer = []
+    xml_marker_found = False
+    xml_start_line = 0
+    last_timestamp = ""
+    last_service = "UNKNOWN"
     
     async with aiofiles.open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
         buffer = ""
@@ -591,26 +621,61 @@ async def process_large_file_chunked(filepath: str, filename: str) -> Dict[str, 
                 line_count += 1
                 stripped = line.strip()
                 
-                # Your existing XML detection logic here
                 if Patterns.TIMESTAMP.match(stripped):
-                    last_timestamp = stripped
-                    last_service = extract_service(stripped)
-                    
-                if ("XML Request:" in stripped or "XML Response:" in stripped) and line_count + 1 < len(lines):
-                    next_line = lines[line_count].strip()  # line_count is 0-based here
-                    if next_line.startswith("<"):
-                        if match := Patterns.RQRS.search(next_line):
+                    # Process any pending XML
+                    if xml_buffer:
+                        xml_content = '\n'.join(xml_buffer)
+                        if match := Patterns.RQRS.search(xml_content):
                             entries.append({
-                                "line": line_count + 1,  # Correct 1-based line number
+                                "line": xml_start_line,
                                 "thread": extract_thread_id(last_timestamp),
                                 "service": last_service,
                                 "tag": match.group(1),
-                                "raw": next_line[:512],
-                                "has_issue": bool(Patterns.XML_ERRORS.search(next_line))
+                                "raw": xml_content[:512],
+                                "has_issue": bool(Patterns.XML_ERRORS.search(xml_content))
                             })
+                        xml_buffer = []
+                    
+                    last_timestamp = stripped
+                    last_service = extract_service(stripped)
+                    xml_marker_found = False
+                    
+                    if "XML Request:" in stripped or "XML Response:" in stripped:
+                        xml_marker_found = True
+                        xml_start_line = line_count + 1
                 
+                elif xml_marker_found:
+                    if stripped.startswith("<"):
+                        xml_buffer.append(stripped)
+                    elif xml_buffer:
+                        xml_content = '\n'.join(xml_buffer)
+                        if match := Patterns.RQRS.search(xml_content):
+                            entries.append({
+                                "line": xml_start_line,
+                                "thread": extract_thread_id(last_timestamp),
+                                "service": last_service,
+                                "tag": match.group(1),
+                                "raw": xml_content[:512],
+                                "has_issue": bool(Patterns.XML_ERRORS.search(xml_content))
+                            })
+                        xml_buffer = []
+                        xml_marker_found = False
+            
             buffer = lines[-1]  # Save partial line for next chunk
             
+    # Process any remaining XML at end of file
+    if xml_buffer:
+        xml_content = '\n'.join(xml_buffer)
+        if match := Patterns.RQRS.search(xml_content):
+            entries.append({
+                "line": xml_start_line,
+                "thread": extract_thread_id(last_timestamp),
+                "service": last_service,
+                "tag": match.group(1),
+                "raw": xml_content[:512],
+                "has_issue": bool(Patterns.XML_ERRORS.search(xml_content))
+            })
+    
     processing_time = time.time() - file_start
     logger.info(f"Processed {filename} - {line_count} lines, {len(entries)} entries in {processing_time:.2f}s")
     
@@ -1234,26 +1299,47 @@ async def get_rqrs_content(log: str, line_number: int, tag: str):
                     status_code=400
                 )
             
-            # Get the XML content line
-            xml_line = lines[line_idx]
-            
-            # Verify the tag matches at the start of the line
-            if not xml_line.startswith(f"<{tag}"):
-                return JSONResponse(
-                    {"error": f"Expected tag <{tag}> not found at start of line {line_number}"},
-                    status_code=400
-                )
-            
-            # Find the closing tag
+            # Get the XML content starting from the specified line
+            xml_lines = []
             closing_tag = f"</{tag}>"
-            if closing_tag not in xml_line:
+            found_closing = False
+            
+            # Search forward to find the complete XML content
+            for i in range(line_idx, len(lines)):
+                xml_lines.append(lines[i])
+                if closing_tag in lines[i]:
+                    found_closing = True
+                    break
+            
+            if not found_closing:
+                # If closing tag not found, search backward (for cases where XML might start before the marker)
+                for i in range(line_idx - 1, -1, -1):
+                    if f"<{tag}" in lines[i]:
+                        # Found opening tag, now search forward from here
+                        xml_lines = []
+                        for j in range(i, len(lines)):
+                            xml_lines.append(lines[j])
+                            if closing_tag in lines[j]:
+                                found_closing = True
+                                break
+                        if found_closing:
+                            line_number = i + 1  # Update the line number to the actual start
+                        break
+            
+            if not found_closing:
                 return JSONResponse(
-                    {"error": f"Closing tag {closing_tag} not found in line {line_number}"},
+                    {"error": f"Closing tag {closing_tag} not found in the log file"},
                     status_code=400
                 )
             
-            # Extract the full XML
-            full_xml = xml_line
+            full_xml = '\n'.join(xml_lines)
+            
+            # Verify the tag matches
+            if not (full_xml.startswith(f"<{tag}") or not full_xml.endswith(f"</{tag}>")):
+                return JSONResponse(
+                    {"error": f"Invalid XML structure for tag {tag}"},
+                    status_code=400
+                )
             
             # Try to pretty-print the XML
             try:
@@ -1267,7 +1353,7 @@ async def get_rqrs_content(log: str, line_number: int, tag: str):
                     "pretty_xml": pretty_xml,
                     "raw_xml": full_xml,
                     "actual_start_line": line_number,
-                    "actual_end_line": line_number,
+                    "actual_end_line": line_number + len(xml_lines) - 1,
                     "status": "success"
                 })
             except ET.ParseError as e:
@@ -1279,7 +1365,7 @@ async def get_rqrs_content(log: str, line_number: int, tag: str):
                         "pretty_xml": pretty_xml,
                         "raw_xml": full_xml,
                         "actual_start_line": line_number,
-                        "actual_end_line": line_number,
+                        "actual_end_line": line_number + len(xml_lines) - 1,
                         "status": "success"
                     })
                 except Exception as dom_error:
