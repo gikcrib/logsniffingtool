@@ -89,11 +89,7 @@ def analyze_log_content(log_text: str) -> Dict[str, Any]:
         "top_threads": top_threads,
         "top_services": top_services,
         "anomalies": anomalies,
-        "recommendations": [
-            "Check services with highest errors",
-            "Focus on most active thread IDs",
-            "Use the Raw Logs viewer to inspect context"
-        ],
+        "recommendations": generate_recommendations(level_counter, top_threads, top_error_services, similar_count),
         "failing_services": [f"{name} ({count})" for name, count in top_error_services]
     }
 
@@ -147,3 +143,29 @@ def generate_summary_text(total_lines: int, level_counter, top_threads, top_serv
         summary += f"{similar_count} repeating error line(s) detected (≥85% similarity).\n"
 
     return summary.strip()
+
+# ✅ Helper: Generate smart AI recommendations based on log content
+def generate_recommendations(level_counter, top_threads, top_error_services, similar_count):
+    """
+    Generates dynamic recommendations based on error severity, threads, and patterns.
+    """
+    recs = []
+
+    if level_counter.get("FATAL", 0) > 0:
+        recs.append("⚠️ Investigate FATAL entries immediately — these are critical issues.")
+    elif level_counter.get("ERROR", 0) > 0:
+        recs.append("📌 Review ERROR lines to trace causes of failure.")
+
+    if top_error_services:
+        recs.append(f"🔍 Start with '{top_error_services[0][0]}' — it has the highest error count.")
+
+    if similar_count >= 3:
+        recs.append("🔁 Repeating error pattern detected — check for retry loops or timeouts.")
+
+    if top_threads:
+        recs.append(f"🧵 Most active thread is '{top_threads[0][0]}' — investigate its role in errors.")
+
+    if not recs:
+        recs.append("✅ No major issues found. Logs appear stable.")
+
+    return recs
