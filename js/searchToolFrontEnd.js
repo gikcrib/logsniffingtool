@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const detailsContent = document.getElementById('detailsContent');
     const copyBtn = document.getElementById('copyBtn');
     const closeBtn = document.getElementById('closeBtn');
-	const refresListhSearchToolBtn = document.getElementById('refresListhSearchToolBtn');
+	const refreshSearchToolBtn = document.getElementById('refreshSearchToolBtn');
 	
 	let useStreaming = true; // Set to false to use regular fetch
 
@@ -362,12 +362,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 	
-	// 🌟 Refresh log list dropdown
-	document.getElementById("refresListhSearchToolBtn").addEventListener("click", () => {
-	  console.log("🔄 Search Tool Refresh List button clicked.");
-    // ✅ Populate the fileSelect dropdown on page load
-    populateFileSelect();
-	});
+        // 🌟 Refresh log list dropdown
+        refreshSearchToolBtn.addEventListener("click", () => {
+          console.log("🔄 Search Tool Refresh List button clicked.");
+          // ✅ Populate the fileSelect dropdown on demand
+          populateFileSelect();
+        });
 }); // END --- closing bracket for DOMContentLoaded function
 
 // ✅ NEW: Log search action to AI logger
