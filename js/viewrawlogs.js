@@ -246,6 +246,22 @@ class LogViewer {
         // Final render with all lines
         this.renderVisibleLines();
         this.updateStatus(`💯 100% Loaded ${selectedFile} - ${this.totalLines.toLocaleString()} lines`);
+ 
+        // ✅ Log to backend AI logger that the file was opened in Raw Logs viewer
+        try {
+          await fetch("/ai/log_action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "view_raw_log",
+              details: {
+                log_file: selectedFile
+              }
+            })
+          });
+        } catch (e) {
+          console.warn("📜 AI Logging failed for raw log view:", e);
+        }
         
     } catch (error) {
         this.showModal('🔴 Error', `Failed to load file: ${error.message}`);

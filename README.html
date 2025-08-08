@@ -54,13 +54,18 @@
 
 <h1><img src="static/img/LogSniffingTool_60x60.png" alt="Log Sniffing Tool Logo" width="60" height="60"> Log Sniffing Tool</h1>
 
-<p>A handy, offline-friendly log inspection tool for developers, QA testers, and support engineers who need to work with log files (JBoss log files is currently supported).</p>
-<p>This project is designed with usability and performance in mind: offering error detection, XML parsing, full-text search, and large file viewing through a beginner-friendly web interface.</p>
+<p>A portable log inspection tool for developers, QA testers, and support engineers who need to work with log files (<em>JBoss log files is currently supported</em>).</p>
+<p>This project is designed with usability and performance in mind: offering error detection with a simple AI generated summary, XML parsing, full-text search, and large file viewing through a beginner-friendly web interface.</p>
+<p>The <strong>Log Sniffing Tool</strong> project is still in BETA version (<em><strong>Version</strong>: <code>v1.0.0.BETA_RELEASE</code> </em>), but the core features are stable and working. Development is still in progress and expect more changes in the future.</p>
 <hr />
 <h2>✨ Features</h2>
+<p>This tool is designed for internal use and offline log analysis. Created to assist with:
+- Fast debugging
+- Issue reproduction
+- SOAP service inspection</p>
 <h3>🧑‍💻 Built With</h3>
 <ul>
-<li>Python (FastAPI, uvicorn, aiofiles, Jinja2)</li>
+<li>Python (e.g. FastAPI, uvicorn, aiofiles, Jinja2)</li>
 <li>JavaScript (Vanilla JS, DOM manipulation)</li>
 <li>HTML5 + CSS3 (custom responsive styling)</li>
 <li>Bash (SCP wrapper for remote downloads)</li>
@@ -75,7 +80,8 @@
 <h3>🧪 Smart Error Scanner</h3>
 <ul>
 <li>Scans logs for <code>[FATAL]</code>, <code>[ERROR]</code>, and <code>[WARN]</code> entries.</li>
-<li>Displays where the error occurred, including:</li>
+<li>Generates a simple AI generated summary of the logs.</li>
+<li>Populates a table where the error occurred, including:</li>
 <li>Log file name</li>
 <li>Line number</li>
 <li>Thread ID</li>
@@ -89,10 +95,10 @@
 <li>Line number</li>
 <li>Thread ID</li>
 <li>Service class</li>
-<li>Tag (with clickable viewer)</li>
-<li>Highlights entries containing issues with a warning icon (⚠️).</li>
+<li>RQ/RS XML (with clickable viewer)</li>
+<li>Highlights XML entries containing issues with a warning icon (⚠️).</li>
 <li>Pretty-printed modal viewer with copy-to-clipboard.</li>
-<li>CSV export support.</li>
+<li>The generated table can be downloaded with the CSV export support.</li>
 </ul>
 <h3>🔍 Keyword Search Tool</h3>
 <ul>
@@ -112,6 +118,7 @@
 <h2>📁 Project Structure</h2>
 <pre><code>logsniffingtool/
 ├── main.py                          # Backend logic (FastAPI)
+├── ai_module.py                     # Backend AI Assistant
 ├── scp_wrapper.sh                   # SCP wrapper for AWS download
 ├── scp_actual.pid                   # Runtime SCP tracking
 ├── applog/
@@ -120,8 +127,7 @@
 │   ├── mainFrontEnd.js              # Error summary &amp; XML
 │   ├── searchToolFrontEnd.js        # Keyword search logic
 │   └── viewrawlogs.js               # Raw log viewer
-├── logs/
-│   └── sample.log                   # Sample log for testing
+├── logs/                            # Location directory of the raw logs
 ├── static/
 │   ├── style.css                    # Global styles
 │   └── img/
@@ -151,7 +157,7 @@
 cd ~/logsniffingtool
 unzip /mnt/path/to/logsniffingtool.zip -d .
 </code></pre>
-<h3>✅ 4. Create and Activate Python Virtual Environment</h3>
+<h3>✅ 4. Create and Activate Python Virtual Environment (OPTIONAL)</h3>
 <pre><code class="language-bash">python3 -m venv venv
 source venv/bin/activate
 </code></pre>
@@ -163,6 +169,7 @@ pydantic
 aiofiles
 jinja2
 psutil
+python-Levenshtein
 EOF
 
 pip install -r requirements.txt
@@ -184,18 +191,37 @@ pip install -r requirements.txt
 <li>Enter SCP details (hostname, username, file path).</li>
 <li>Wait for download to finish (real-time progress shown).</li>
 </ul>
+<p align="left">
+  <img src="static/screenshots/DownloadingLogs.jpg" alt="Downloading Logs" width="750" height="363">
+</p>
+
 <h3>2. Analyze Logs</h3>
 <ul>
 <li>Choose <strong>All logs</strong> or <strong>Specific log</strong> from the dropdown.</li>
 <li>Click <strong>🧪 Review Logs</strong> to begin analysis.</li>
+<li>View the generated summary analysis of the logs (<em>if specific logs is selected</em>)</li>
 <li>View errors and filter by Thread or Service.</li>
 </ul>
+<p align="left">
+  <img src="static/screenshots/AnalyzeLogs.jpg" alt="Analyze Logs" width="750" height="363">
+</p>
+<p align="left">
+  <img src="static/screenshots/ErrorSnippet.jpg" alt="Viewing Error Snippet" width="750" height="367">
+</p>
+
 <h3>3. Browse SOAP XML</h3>
 <ul>
 <li>Switch to the <strong>Parsed XMLs</strong> tab.</li>
 <li>Filter by Thread ID, Service, or RQ/RS tag.</li>
 <li>Click on any tag to view formatted XML.</li>
 </ul>
+<p align="left">
+  <img src="static/screenshots/ParsedXMLs.jpg" alt="Parsed RQ and RS XMLs from Logs" width="750" height="367">
+</p>
+<p align="left">
+  <img src="static/screenshots/ViewXML.jpg" alt="Viewing Parsed RQ and RS XMLs" width="750" height="367">
+</p>
+
 <h3>4. Search Log Content</h3>
 <ul>
 <li>Go to <strong>Search Tools</strong> tab.</li>
@@ -203,12 +229,23 @@ pip install -r requirements.txt
 <li>Click <strong>🔍 Search</strong> — results are streamed live.</li>
 <li>Click snippet row to view full context.</li>
 </ul>
+<p align="left">
+  <img src="static/screenshots/SearchTool.jpg" alt="Search Tool" width="750" height="363">
+</p>
+<p align="left">
+  <img src="static/screenshots/SearchToolSnippet.jpg" alt="Search Tool Snippet" width="750" height="363">
+</p>
+
 <h3>5. View Logs Like Text Editor</h3>
 <ul>
 <li>Switch to <strong>View Raw Logs</strong> tab.</li>
 <li>Choose a file, click <strong>📁 Load File</strong>.</li>
 <li>Search, navigate, and copy directly like in Notepad++.</li>
 </ul>
+<p align="left">
+  <img src="static/screenshots/ViewLogs.jpg" alt="View Raw Logs" width="750" height="363">
+</p>
+
 <hr />
 <h2>❓ FAQ</h2>
 <h3>Q: How do I update the log file list?</h3>
@@ -253,15 +290,5 @@ pip install -r requirements.txt
 </tr>
 </tbody>
 </table>
-<hr />
-<h2>🙌 Acknowledgments</h2>
-<p>This tool is designed for internal use and offline log analysis. Created to assist with:
-- Fast debugging
-- Issue reproduction
-- SOAP service inspection</p>
-<hr />
-<h2>📌 Status</h2>
-<p><strong>Version</strong>: <code>v1.0.0.BETA_RELEASE</code></p>
-<p>🛠️ Development ongoing. Core features are stable and working.</p>
 </body>
 </html>

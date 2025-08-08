@@ -5,7 +5,10 @@
 /temp/
 /applog/
 /bak/
-.gitignore.bak
+/ml_data/
+/changes/
+/ml_data/user_behavior.jsonl
+.*.bak
 *.bak
 *.txt
 *.Identifier
@@ -13,4 +16,5 @@
 *.zip
 *.7z
 *.bak.py
+*.jsonl
 convert_md_to_html.py

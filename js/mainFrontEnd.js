@@ -109,6 +109,9 @@ function resetErrorSummary() {
     document.getElementById('fatalBar').style.width = '0%';
     document.getElementById('errorBar').style.width = '0%';
     document.getElementById('warnBar').style.width = '0%';
+
+    const output = document.getElementById("ai-output");
+    output.innerHTML = "🔬 No analysis yet. Please select a log and click analyze."
 }
 
 // =============================================
@@ -153,6 +156,7 @@ async function analyzeLogs() {
     const mode = document.querySelector('input[name="analyzeMode"]:checked').value;
     const logSelect = document.getElementById("logSelect");
     const selectedLog = logSelect ? logSelect.value : null;
+    const output = document.getElementById("ai-output");
 
     // Check if the log list dropdown is empty
     const logSelectOptions = logSelect ? Array.from(logSelect.options) : [];
@@ -160,6 +164,7 @@ async function analyzeLogs() {
 
     if (!hasLogFiles) {
         showNoLogsModal();
+        output.innerHTML = "🚫 No logs to analyze.";
         console.warn("🚫 No logs to analyze.");
         return;
     }
@@ -167,10 +172,29 @@ async function analyzeLogs() {
     if (mode === "specific" && (!selectedLog || selectedLog === "")) {
         console.warn("🚫 Skipping analysis: no file selected.");
         showNoLogsModal();
+        output.innerHTML = "🚫 No logs to analyze.";
         return;
     }
 
     console.log("🧪 Sending analysis request:", { mode, log: selectedLog });
+
+    // ✅ Log to backend AI logger that user started analysis
+    try {
+      await fetch("/ai/log_action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "analyze_logs",
+          details: {
+            mode: mode,
+            log_file: selectedLog || "ALL"
+          }
+        })
+      });
+    } catch (e) {
+      console.warn("🧪 AI Logging failed for analyze_logs:", e);
+    }
+
     document.getElementById("analysisOverlay").style.display = "flex";
 
     let rqrsPromise = Promise.resolve();
@@ -198,6 +222,7 @@ async function analyzeLogs() {
         ))) {
             showNoLogsModal();
             console.warn("🚫 No errors found from the logs to analyze (All Logs mode).");
+            output.innerHTML = "🚫 No anomalies or errors from the logs.";
             return;
         }
 
@@ -226,6 +251,7 @@ async function analyzeLogs() {
         // Update error details table
         const tableBody = document.querySelector("#errorDetailsTable tbody");
         tableBody.innerHTML = "";
+        output.innerHTML = "🕒 Waiting for the next file to analyze.";
 
         document.getElementById("threadFilter").value = "";
         document.getElementById("serviceFilter").value = "";
@@ -274,9 +300,11 @@ async function analyzeLogs() {
 
         // After error summary is updated, populate RQRS (only for specific mode)
         if (mode === "specific" && selectedLog) {
+            aiSummary();
             rqrsPromise = fetchRQRS(selectedLog);
         } else {
             const rqrsTableBody = document.querySelector("#rqrsTable tbody");
+            output.innerHTML = "⚠️ Only specific log file is supported.";
             rqrsTableBody.innerHTML = "";
         }
 
@@ -577,6 +605,26 @@ async function fetchAndDisplayXMLForModal(log, index, tag) {
         } else {
             throw new Error("No XML content in response");
         }
+
+        // ✅ Log to backend AI logger that XML was viewed
+        try {
+          await fetch("/ai/log_action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "view_xml",
+              details: {
+                log_file: log,
+                line_number: entry.line,
+                tag: tag
+              }
+            })
+          });
+        } catch (e) {
+          console.warn("🧩 AI Logging failed for view_xml:", e);
+        }
+
+
     } catch (err) {
         console.error("❌ Error displaying XML:", err);
         showToast(`❌ Failed to load XML: ${err.message}`);
@@ -1173,6 +1221,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Initial fetch
     setTimeout(fetchLogs, 0);
+
+    // ✅ AI Assistant
+    // const logSelect = document.getElementById("logSelect");
+    const output = document.getElementById("ai-output");   
+
 });
 
 // =============================================
@@ -1252,3 +1305,45 @@ async function clearCache() {
         throw error;
     }
 }
+// =============================================
+// 13. STATIC AI SUMMARY
+// =============================================
+// ✅ AI Assistant
+
+    async function aiSummary() {
+        const log = logSelect.value;
+        const output = document.getElementById("ai-output"); 
+        if (!log) return alert("Please select a log file.");
+
+        output.innerHTML = "🧠 Analyzing log file... Please wait.";
+
+        try {
+          const res = await fetch("/ai/inspect_log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ log })
+          });
+          const data = await res.json();
+
+        output.innerHTML = `
+          <h3>🤖 Highlevel Summary</h3>
+          <pre>${data.summary}</pre>
+          <h3>🔝 Top Threads</h3>
+          <ul>${data.top_threads.map(t => `<li>${t[0]} — ${t[1]} lines</li>`).join('')}</ul>
+          <h3>🔝 Top Services</h3>
+          <ul>${data.top_services.map(s => `<li>${s[0]} — ${s[1]} lines</li>`).join('')}</ul>
+          <h3>🚨 Anomalies</h3>
+          <ul>${data.anomalies.length ? data.anomalies.map(a => `<li>${a}</li>`).join('') : '<li>None detected</li>'}</ul>
+          ${data.failing_services && data.failing_services.length ? `
+            <h3 style="margin-top:1rem; color:#c0392b;">🛠️ Services With Most Errors</h3>
+            <ul style="padding-left: 1rem; color: #e74c3c; font-weight: bold;">
+              ${data.failing_services.map(s => `<li>❌ ${s}</li>`).join('')}
+            </ul>
+          ` : ''}
+          <h3>🧠 Recommendations</h3>
+          <ul>${data.recommendations.map(r => `<li>${r}</li>`).join('')}</ul>
+        `;
+        } catch (e) {
+          output.innerHTML = `❌ Failed to analyze log: ${e.message}`;
+        }
+    }

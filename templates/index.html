@@ -23,10 +23,10 @@
         <!-- Tab Navigation -->
         <div class="tab-container">
             <div class="tab-header">
-                <button class="tab-button active" data-tab="error-tab">Error Summary</button>
-                <button class="tab-button" data-tab="soap-tab">Parsed XMLs</button>
-                <button class="tab-button" data-tab="search-tab">Search Tools</button>
-				<button class="tab-button" data-tab="rawlogs-tab">View Raw Logs</button>
+                <button class="tab-button active" data-tab="error-tab">💥 Error Summary</button>
+                <button class="tab-button" data-tab="soap-tab">🧩 Parsed XMLs</button>
+                <button class="tab-button" data-tab="search-tab">🔎 Search Tools</button>
+				<button class="tab-button" data-tab="rawlogs-tab">🧾 View Raw Logs</button>
             </div>
 	
             <!-- Error Summary Tab -->
@@ -56,7 +56,12 @@
 
 					</div>
 				 </div>
-				 
+
+				<!-- Static AI Summary Report -->
+				<div id="ai-output" class="error-summary" style="margin-top: 1rem;">
+					<em>🔬 No analysis yet. Please select a log and click analyze.</em>
+				</div>
+
 				 <div id="errorCountSummary" class="error-summary">
 					<div id="errorCountSummary" class="error-summary">
 					  <h3>📄 Total Number of Errors Found</h3>
@@ -84,7 +89,6 @@
 
 					  </div>
 					</div>
-
 
 					<!-- 🔽 BEGIN: Error Details Table -->
 					<div id="errorDetailsTableWrapper" style="margin-top: 20px;">
@@ -254,6 +258,7 @@
 						<div id="logview-content" class="logview-content"></div>
 					</div>
 				</div>
+
         </div> <!-- End of tabs -->
 
         <!-- JavaScript Files Section-->
