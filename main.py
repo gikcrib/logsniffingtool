@@ -65,8 +65,8 @@ class Config:
     LOG_OUTPUT_DIR = "./applog"
     LOG_DIR = "./logs"
     MAX_CACHE_SIZE = 10
-    PRELOAD_ENABLED = False
-    PRELOAD_LARGE_FILES = False
+    PRELOAD_ENABLED = True  # Enable background preloading of logs
+    PRELOAD_LARGE_FILES = True  # Preload large files in background
     LARGE_FILE_THRESHOLD_MB = 10 # Threshold for processing XML RQ/RS from logs
     EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.tar.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
     CRITICAL_ENDPOINTS = [
