@@ -3,8 +3,24 @@
 import re, logging
 from collections import Counter
 from typing import Dict, Any
-import Levenshtein
 
+# Try to use the fast python-Levenshtein library if available.  When it
+# isn't installed fall back to difflib's SequenceMatcher so that the
+# module still works out of the box.  The previous implementation relied
+# on an unconditional import which raised ``ModuleNotFoundError`` when the
+# optional dependency was missing, breaking AI log analysis entirely.
+try:  # pragma: no cover - simple import guard
+    import Levenshtein  # type: ignore
+
+    def _levenshtein_ratio(a: str, b: str) -> float:
+        return Levenshtein.ratio(a, b)
+
+except Exception:  # pragma: no cover - fallback implementation
+    from difflib import SequenceMatcher
+
+    def _levenshtein_ratio(a: str, b: str) -> float:
+        return SequenceMatcher(None, a, b).ratio()
+        
 # 🔍 Basic regex patterns to reuse from main app
 ERROR_PATTERN = re.compile(r'\[(ERROR|WARN|FATAL)\]')
 SERVICE_PATTERN = re.compile(r'\[(com\.datalex\..+?)\]')
@@ -100,7 +116,11 @@ def analyze_log_content(log_text: str) -> Dict[str, Any]:
 # ✅ Helper function to detect similar error lines using Levenshtein distance
 def detect_similar_errors(error_lines: list, threshold: float = 0.85) -> int:
     """
-    Detect how many lines are similar to each other using Levenshtein ratio.
+    Detect how many lines are similar to each other using a Levenshtein
+    ratio. The fast `python-Levenshtein` package is used when available,
+    otherwise the standard library `difflib.SequenceMatcher` is used as a
+    fallback.
+
     - Only compares [ERROR], [WARN], [FATAL] lines.
     - Returns how many lines were part of ≥85% match groups.
     """
@@ -113,7 +133,7 @@ def detect_similar_errors(error_lines: list, threshold: float = 0.85) -> int:
                 continue  # Skip already matched
 
             line_j = error_lines[j][1]
-            similarity = Levenshtein.ratio(line_i, line_j)
+            similarity = _levenshtein_ratio(line_i, line_j)
 
             if similarity >= threshold:
                 matched_indices.update({i, j})  # Save both
