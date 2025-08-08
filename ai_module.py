@@ -1,14 +1,17 @@
-# ✅ ai_module.py — AI Assistant backend logic
+# ✅ AI Assistant backend logic
 
-import re
+import re, logging
 from collections import Counter
 from typing import Dict, Any
 import Levenshtein
 
 # 🔍 Basic regex patterns to reuse from main app
 ERROR_PATTERN = re.compile(r'\[(ERROR|WARN|FATAL)\]')
-THREAD_PATTERN = re.compile(r'\[(NDC_[^\]]+?)\]')
 SERVICE_PATTERN = re.compile(r'\[(com\.datalex\..+?)\]')
+
+class ThreadPatterns:
+    THREAD_ID = re.compile(r'(?:\[[^\]]*\] ){1,2}\[(\d{13}_\d{4})\]')
+
 
 # ✅ Main AI analysis function
 def analyze_log_content(log_text: str) -> Dict[str, Any]:
@@ -38,8 +41,9 @@ def analyze_log_content(log_text: str) -> Dict[str, Any]:
                 error_services_counter[service] += 1
 
         # ✅ Count threads
-        thread_match = THREAD_PATTERN.search(line)
+        thread_match = ThreadPatterns.THREAD_ID.search(line)
         if thread_match:
+            # logger.debug("Pattern THREAD_ID found")
             thread_counter[thread_match.group(1)] += 1
 
         # ✅ Count all services (not just error ones)
@@ -140,7 +144,7 @@ def generate_summary_text(total_lines: int, level_counter, top_threads, top_serv
         summary += f"Most active service: {top_services[0][0]} ({top_services[0][1]} lines).\n"
 
     if similar_count > 0:
-        summary += f"{similar_count} repeating error line(s) detected (≥85% similarity).\n"
+        summary += f"{similar_count} repeating error line(s) detected (Levenshtein ≥85% similarity error grouping).\n"
 
     return summary.strip()
 
@@ -163,7 +167,7 @@ def generate_recommendations(level_counter, top_threads, top_error_services, sim
         recs.append("🔁 Repeating error pattern detected — check for retry loops or timeouts.")
 
     if top_threads:
-        recs.append(f"🧵 Most active thread is '{top_threads[0][0]}' — investigate its role in errors.")
+        recs.append(f"🧵 Most active thread from the logs is '{top_threads[0][0]}'.")
 
     if not recs:
         recs.append("✅ No major issues found. Logs appear stable.")

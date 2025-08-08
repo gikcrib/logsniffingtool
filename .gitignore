@@ -6,6 +6,7 @@
 /applog/
 /bak/
 /ml_data/
+/changes/
 /ml_data/user_behavior.jsonl
 .*.bak
 *.bak

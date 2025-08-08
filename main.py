@@ -94,7 +94,7 @@ class GlobalState:
 # Regex patterns
 class Patterns:
     TIMESTAMP = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d{3}')
-    THREAD_ID = re.compile(r'\[(\d{13}_\d{4}|NDC|REST)\]')
+    THREAD_ID = re.compile(r'(?:\[[^\]]*\] ){1,2}\[(\d{13}_\d{4})\]')
     ERROR = re.compile(r"\[(ERROR|WARN|FATAL)\]")
     SERVICE = re.compile(r"\[(com\.datalex\..+?)\]")
     RQRS_MARKER = re.compile(r'(XML Request:|XML Response:)\s*$')
@@ -224,18 +224,9 @@ def get_file_metadata(filepath: Path) -> Dict[str, Any]:
 def extract_thread_id(line: str) -> str:
     """Extract thread ID from log line with multiple fallback patterns"""
     # First try the specific thread patterns
-    match = Patterns.THREAD.search(line)
+    match = Patterns.THREAD_ID.search(line)
     if match:
-        return match.group(1)
-    
-    match = Patterns.ALT_THREAD.search(line)
-    if match:
-        return match.group(1)
-    
-    # Then try the thread ID pattern (digits_underscore_digits)
-    match = Patterns.THREAD_FALLBACK.search(line)
-    if match:
-        return match.group(0)
+        return match.group(1)   
     
     # Only if none of the above match, return UNKNOWN
     # Don't fall back to BRACKETED as it might catch wrong things
