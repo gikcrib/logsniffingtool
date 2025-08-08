@@ -18,7 +18,6 @@ from typing import Dict, Any, Optional, List
 from xml.etree import ElementTree as ET
 from io import StringIO
 from ai_module import analyze_log_content
-from ml_logger import log_user_action
 import uvicorn, shutil, asyncio, os, re, difflib, json, time, subprocess, math, logging, sys, aiofiles, threading, psutil, signal, traceback, zipfile, tarfile, gzip
 
 
@@ -2472,34 +2471,12 @@ async def ai_inspect_log(req: Request):
         # ✅ Run the AI analyzer on the log content
         result = analyze_log_content(log_content)
 
-        # ✅ NEW: Log user behavior — what log they analyzed
-        log_user_action("ai_analysis", {
-            "log_file": log_name
-        })
-
         return result
 
     except Exception as e:
         logger.error(f"AI inspection failed: {str(e)}")
         raise HTTPException(status_code=500, detail="AI analysis failed")
         
-@app.post("/ai/log_action")
-async def ai_log_action(req: Request):
-    """
-    Generic endpoint for front-end to log user behavior (searches, views, etc).
-    """
-    try:
-        data = await req.json()
-        action = data.get("action")
-        metadata = data.get("details", {})
-        if not action:
-            raise HTTPException(status_code=400, detail="Missing 'action'")
-        
-        log_user_action(action, metadata)
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"AI behavior log failed: {e}")
-        raise HTTPException(status_code=500, detail="Logging failed")
 
 ########################################################
 # Starting FastAPI server in port 8001 by default

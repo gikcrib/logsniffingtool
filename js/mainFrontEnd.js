@@ -178,23 +178,6 @@ async function analyzeLogs() {
 
     console.log("🧪 Sending analysis request:", { mode, log: selectedLog });
 
-    // ✅ Log to backend AI logger that user started analysis
-    try {
-      await fetch("/ai/log_action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "analyze_logs",
-          details: {
-            mode: mode,
-            log_file: selectedLog || "ALL"
-          }
-        })
-      });
-    } catch (e) {
-      console.warn("🧪 AI Logging failed for analyze_logs:", e);
-    }
-
     document.getElementById("analysisOverlay").style.display = "flex";
 
     let rqrsPromise = Promise.resolve();
@@ -605,25 +588,6 @@ async function fetchAndDisplayXMLForModal(log, index, tag) {
         } else {
             throw new Error("No XML content in response");
         }
-
-        // ✅ Log to backend AI logger that XML was viewed
-        try {
-          await fetch("/ai/log_action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "view_xml",
-              details: {
-                log_file: log,
-                line_number: entry.line,
-                tag: tag
-              }
-            })
-          });
-        } catch (e) {
-          console.warn("🧩 AI Logging failed for view_xml:", e);
-        }
-
 
     } catch (err) {
         console.error("❌ Error displaying XML:", err);
