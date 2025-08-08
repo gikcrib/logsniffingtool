@@ -65,8 +65,8 @@ class Config:
     LOG_OUTPUT_DIR = "./applog"
     LOG_DIR = "./logs"
     MAX_CACHE_SIZE = 10
-    PRELOAD_ENABLED = True  # Enable background preloading of logs
-    PRELOAD_LARGE_FILES = True  # Preload large files in background
+    PRELOAD_ENABLED = False
+    PRELOAD_LARGE_FILES = False
     LARGE_FILE_THRESHOLD_MB = 10 # Threshold for processing XML RQ/RS from logs
     EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.tar.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
     CRITICAL_ENDPOINTS = [
@@ -222,14 +222,10 @@ def get_file_metadata(filepath: Path) -> Dict[str, Any]:
     }
 
 def extract_thread_id(line: str) -> str:
-    """Extract thread ID from log line with multiple fallback patterns"""
-    # First try the specific thread patterns
+    """Extract thread ID using `Patterns.THREAD_ID`, returning ``"UNKNOWN"`` if no match."""
     match = Patterns.THREAD_ID.search(line)
     if match:
-        return match.group(1)   
-    
-    # Only if none of the above match, return UNKNOWN
-    # Don't fall back to BRACKETED as it might catch wrong things
+        return match.group(1)
     return "UNKNOWN"
 
 def extract_service(line: str) -> str:
