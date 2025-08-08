@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover - fallback implementation
 
     def _levenshtein_ratio(a: str, b: str) -> float:
         return SequenceMatcher(None, a, b).ratio()
-
+        
 # 🔍 Basic regex patterns to reuse from main app
 ERROR_PATTERN = re.compile(r'\[(ERROR|WARN|FATAL)\]')
 SERVICE_PATTERN = re.compile(r'\[(com\.datalex\..+?)\]')
