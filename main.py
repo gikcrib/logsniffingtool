@@ -222,14 +222,10 @@ def get_file_metadata(filepath: Path) -> Dict[str, Any]:
     }
 
 def extract_thread_id(line: str) -> str:
-    """Extract thread ID from log line with multiple fallback patterns"""
-    # First try the specific thread patterns
+    """Extract thread ID using `Patterns.THREAD_ID`, returning ``"UNKNOWN"`` if no match."""
     match = Patterns.THREAD_ID.search(line)
     if match:
-        return match.group(1)   
-    
-    # Only if none of the above match, return UNKNOWN
-    # Don't fall back to BRACKETED as it might catch wrong things
+        return match.group(1)
     return "UNKNOWN"
 
 def extract_service(line: str) -> str:
