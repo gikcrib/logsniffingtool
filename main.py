@@ -2483,23 +2483,6 @@ async def ai_inspect_log(req: Request):
         logger.error(f"AI inspection failed: {str(e)}")
         raise HTTPException(status_code=500, detail="AI analysis failed")
         
-@app.post("/ai/log_action")
-async def ai_log_action(req: Request):
-    """
-    Generic endpoint for front-end to log user behavior (searches, views, etc).
-    """
-    try:
-        data = await req.json()
-        action = data.get("action")
-        metadata = data.get("details", {})
-        if not action:
-            raise HTTPException(status_code=400, detail="Missing 'action'")
-        
-        log_user_action(action, metadata)
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"AI behavior log failed: {e}")
-        raise HTTPException(status_code=500, detail="Logging failed")
 
 ########################################################
 # Starting FastAPI server in port 8001 by default
