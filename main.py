@@ -64,17 +64,22 @@ class Config:
     LOG_OUTPUT_DIR = "./applog"
     LOG_DIR = "./logs"
     MAX_CACHE_SIZE = 10
-    PRELOAD_ENABLED = False
-    PRELOAD_LARGE_FILES = False
+    PRELOAD_ENABLED = False  # Enable background preload of logs
+    PRELOAD_LARGE_FILES = True  # Preload large files in background
     LARGE_FILE_THRESHOLD_MB = 10 # Threshold for processing XML RQ/RS from logs
     EXCLUDED_EXTENSIONS = {'.zip', '.tar', '.gz', '.tar.gz', '.7z', '.Z', '.bz2', '.rar', '.xz'}
     CRITICAL_ENDPOINTS = [
         '/list_logs',
+        '/get_log_content',
+        '/api/logs/list'
         '/healthcheck',
         '/get_rqrs',
         '/api/search_logs_stream',
         '/get_rqrs_content',
-        '/download_remote_logs'
+        '/download_remote_logs',
+        '/ai/inspect_log',
+        '/analyze_logs',
+        '/parse_progress'
     ]
 
 # Initialize global state
@@ -99,10 +104,7 @@ class Patterns:
     RQRS_MARKER = re.compile(r'(XML Request:|XML Response:)\s*$')
     RQRS = re.compile(r'<([a-zA-Z_][\w]*?(RQ|RS))[\s>]')
     DATE = re.compile(r'^\d{4}-\d{2}-\d{2}')
-    THREAD = re.compile(r'\[(NDC_[^\]]+?)\]')
-    ALT_THREAD = re.compile(r'\[NA\] \[([^\]]+?)\] \[NA\]')
     BRACKETED = re.compile(r'\[([^\[\]]+)\]')
-    THREAD_FALLBACK = re.compile(r'\d{13}_\d{4,}')
     SERVICE_CLASS = re.compile(r'\[([^\]]+?)\]$')
     XML_ERRORS = re.compile(r'<(ns1:)?Errors>|<.*Error.*>|ErrorCode|WarningCode', re.IGNORECASE)
 
